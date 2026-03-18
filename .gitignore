@@ -1,0 +1,7 @@
+CLAUDE.md
+frontend/.env
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+*.db

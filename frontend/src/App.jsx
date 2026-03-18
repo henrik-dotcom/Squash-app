@@ -43,22 +43,22 @@ function useIsMobile() {
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 const C = {
-  bg: "#20203a", surface: "#2e2e52", surfaceHi: "#38386a",
-  border: "#48487a", borderHi: "#5a5a96",
-  text: "#ffffff", muted: "#b0b0d8",
+  bg: "#2C2C2A", surface: "#1E1E1C", surfaceHi: "#252523",
+  border: "rgba(255,255,255,0.1)", borderHi: "rgba(255,255,255,0.15)",
+  text: "#ffffff", muted: "#9C9A92", tertiary: "#6B6A63",
   accent: "#88aaff", green: "#44ff77", red: "#ff4455", orange: "#ff8855", blue: "#4488ff",
 };
 const FONT = "'DM Mono','Courier New',monospace";
 
 const S = {
   card: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, marginBottom: 12 },
-  label: { display: "block", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 6, fontWeight: 700 },
-  input: { background: "#2a2a4e", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", fontFamily: FONT, WebkitAppearance: "none" },
-  select: { background: "#2a2a4e", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 38px 13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", cursor: "pointer", fontFamily: FONT, WebkitAppearance: "none", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7a9a' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" },
+  label: { display: "block", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.tertiary, marginBottom: 6, fontWeight: 700 },
+  input: { background: "#252523", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", fontFamily: FONT, WebkitAppearance: "none" },
+  select: { background: "#252523", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 38px 13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", cursor: "pointer", fontFamily: FONT, WebkitAppearance: "none", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B6A63' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" },
   btn: { background: C.accent, color: "#0a0a0f", border: "none", borderRadius: 8, padding: "14px 24px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", letterSpacing: "0.04em", touchAction: "manipulation" },
   btnSmall: { background: "transparent", color: C.accent, border: `1px solid ${C.accent}`, borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
   btnGhost: { background: "transparent", color: C.red, border: `1px solid ${C.red}`, borderRadius: 8, padding: "14px 20px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
-  sectionHead: { fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 14, fontWeight: 700 },
+  sectionHead: { fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.tertiary, marginBottom: 14, fontWeight: 700 },
   row: (last) => ({ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: last ? "none" : `1px solid ${C.border}` }),
 };
 
@@ -115,113 +115,242 @@ function ErrorBanner({ msg, onRetry }) {
 
 
 // ════════════════════════════════════════════════════════════════════════════════
-// LOG MATCH
+// MATCH PREVIEW
 // ════════════════════════════════════════════════════════════════════════════════
-function LogMatch({ players, onLogged }) {
-  const [p1, setP1] = useState("");
-  const [p2, setP2] = useState("");
+function MatchPreview({ p1, p2, playerMap, matches, onBack, onLogged }) {
+  const pd1 = playerMap[p1] ?? { elo: 1000, matches: 0 };
+  const pd2 = playerMap[p2] ?? { elo: 1000, matches: 0 };
+  const r1 = pd1.elo, r2 = pd2.elo;
+  const m1 = pd1.matches, m2 = pd2.matches;
+
   const [s1, setS1] = useState("");
   const [s2, setS2] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState("");
-
-  const names = players.map(p => p.name).sort();
   const entered = s1 !== "" && s2 !== "";
   const scoreOk = entered && validateScore(s1, s2);
-  const ready = p1 && p2 && p1 !== p2 && scoreOk && !submitting;
-
-  const playerMap = useMemo(() => Object.fromEntries(players.map(p => [p.name, p])), [players]);
-
-  const preview = useMemo(() => {
-    if (!ready) return null;
-    const r1 = playerMap[p1]?.elo ?? 1000, r2 = playerMap[p2]?.elo ?? 1000;
-    const m1 = playerMap[p1]?.matches ?? 0, m2 = playerMap[p2]?.matches ?? 0;
-    const p1wins = parseInt(s1) > parseInt(s2);
-    const expP1 = 1 / (1 + Math.pow(10, (r2 - r1) / 400));
-    const n1 = parseInt(s1), n2 = parseInt(s2);
-    return { r1, r2, p1wins, expP1, p1post: calcEloPreview(r1, r2, p1wins, m1, n1, n2), p2post: calcEloPreview(r2, r1, !p1wins, m2, n2, n1) };
-  }, [p1, p2, s1, s2, ready, playerMap]);
 
   async function submit() {
-    if (!ready) return;
+    if (!scoreOk || submitting) return;
     setSubmitting(true); setApiError("");
     try {
-      const result = await apiFetch("/matches", {
-        method: "POST",
-        body: JSON.stringify({ p1, p2, s1: parseInt(s1), s2: parseInt(s2) }),
-      });
-      setToast(`✓ Logged — ${result.winner} won ${Math.max(result.s1,result.s2)}–${Math.min(result.s1,result.s2)}`);
-      setP1(""); setP2(""); setS1(""); setS2("");
-      setTimeout(() => setToast(""), 4000);
+      await apiFetch("/matches", { method: "POST", body: JSON.stringify({ p1, p2, s1: parseInt(s1), s2: parseInt(s2) }) });
       onLogged();
     } catch (e) {
       setApiError(e.message);
-    } finally {
       setSubmitting(false);
     }
   }
 
+  const expP1 = 1 / (1 + Math.pow(10, (r2 - r1) / 400));
+  const pctP1 = Math.round(expP1 * 100), pctP2 = 100 - pctP1;
+
+  const eloDiff = Math.abs(r1 - r2);
+  const underdogName = eloDiff >= 150 ? (r1 < r2 ? p1 : p2) : null;
+
+  const h2hAll = matches.filter(m => m.valid && ((m.p1 === p1 && m.p2 === p2) || (m.p1 === p2 && m.p2 === p1)));
+  const winsP1 = h2hAll.filter(m => m.winner === p1).length;
+  const winsP2 = h2hAll.filter(m => m.winner === p2).length;
+
+  let streak = 0, streakWinner = null;
+  for (const m of [...h2hAll].reverse()) {
+    if (!streakWinner) streakWinner = m.winner;
+    if (m.winner === streakWinner) streak++; else break;
+  }
+
+  const form = name => matches.filter(m => m.valid && (m.p1 === name || m.p2 === name)).slice(-5).map(m => m.winner === name ? "W" : "L");
+  const formP1 = form(p1), formP2 = form(p2);
+
+  const getK = (elo, mc) => elo >= 2000 ? 10 : mc >= 30 ? 20 : 40;
+  const maxStake = Math.max(Math.round(getK(r1, m1) * 2 * (1 - expP1)), Math.round(getK(r2, m2) * 2 * expP1));
+
+  const initials = name => name.trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+
+  const underdogH2hNote = (() => {
+    if (!underdogName) return null;
+    const favName = underdogName === p1 ? p2 : p1;
+    const uWins = underdogName === p1 ? winsP1 : winsP2;
+    const fWins = underdogName === p1 ? winsP2 : winsP1;
+    const total = uWins + fWins;
+    if (total === 0) return null;
+    return `${underdogName} is ${uWins}–${fWins} vs ${favName} all time`;
+  })();
+
+  const divider = <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", margin: "14px 0" }} />;
+
   return (
-    <>
-      <div style={S.sectionHead}>Log Match</div>
-      {toast && <div style={{ ...S.card, borderColor: "#2a6a2a", background: "#102010", color: C.green, fontSize: 13 }}>{toast}</div>}
-      {apiError && <ErrorBanner msg={apiError} />}
+    <div style={S.card}>
+      <div style={{ ...S.sectionHead, marginBottom: 18 }}>Match Preview</div>
 
-      <div style={S.card}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-          {[{ lbl: "Player 1", val: p1, set: setP1, excl: p2 }, { lbl: "Player 2", val: p2, set: setP2, excl: p1 }].map(({ lbl, val, set, excl }) => (
-            <div key={lbl}>
-              <label style={S.label}>{lbl}</label>
-              <select style={S.select} value={val} onChange={e => { set(e.target.value); setApiError(""); }}>
-                <option value="">Select…</option>
-                {names.filter(n => n !== excl).map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
+      {/* Players VS row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "flex-start", marginBottom: 20, gap: 8 }}>
+        {[{ name: p1, elo: r1, av: "#E6F1FB", avText: "#0C447C" }, { name: p2, elo: r2, av: "#E1F5EE", avText: "#085041" }].map(({ name, elo, av, avText }) => (
+          <div key={name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 52, height: 52, borderRadius: "50%", background: av, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, color: avText }}>
+              {initials(name)}
             </div>
-          ))}
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {[{ lbl: p1 || "P1", val: s1, set: setS1, ph: "11" }, { lbl: p2 || "P2", val: s2, set: setS2, ph: "7" }].map(({ lbl, val, set, ph }) => (
-            <div key={lbl}>
-              <label style={S.label}>{lbl} Score</label>
-              <input style={{ ...S.input, borderColor: entered && !scoreOk ? C.red : C.borderHi }} type="number" inputMode="numeric" min={0} max={50} value={val} onChange={e => set(e.target.value)} placeholder={ph} />
-            </div>
-          ))}
-        </div>
-
-        {entered && !scoreOk && <div style={{ marginTop: 10, fontSize: 12, color: C.red, lineHeight: 1.5 }}>✗ Invalid — win by 2 with ≥11 pts (e.g. 11–7, 12–10, 15–13)</div>}
-
-        {preview && (
-          <div style={{ marginTop: 14, padding: 14, background: C.bg, borderRadius: 8, border: `1px solid ${C.border}` }}>
-            <div style={{ ...S.label, marginBottom: 10 }}>ELO Preview</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {[{ name: p1, pre: preview.r1, post: preview.p1post, exp: preview.expP1 }, { name: p2, pre: preview.r2, post: preview.p2post, exp: 1 - preview.expP1 }].map(({ name, pre, post, exp }) => {
-                const d = post - pre;
-                return (
-                  <div key={name} style={{ background: C.surface, borderRadius: 8, padding: 12, border: `1px solid ${C.border}` }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{name}</div>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 11, color: C.muted }}>{pre.toFixed(0)} →</span>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{post.toFixed(1)}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: d >= 0 ? C.green : C.red }}>{d >= 0 ? "+" : ""}{d.toFixed(1)}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: "#444", marginTop: 5 }}>{(exp * 100).toFixed(0)}% win prob</div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: "#888" }}>Winner: <span style={{ color: C.accent, fontWeight: 700 }}>{preview.p1wins ? p1 : p2}</span></div>
+            <div style={{ fontWeight: 700, fontSize: 14, textAlign: "center" }}>{name}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>{elo.toFixed(0)} ELO</div>
+            {name === underdogName && (
+              <div style={{ background: "#FAEEDA", color: "#633806", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, letterSpacing: "0.05em" }}>Underdog</div>
+            )}
           </div>
-        )}
+        ))}
+        {/* VS — sits in the middle column, pushed down to name level */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: 60, fontSize: 15, fontWeight: 500, color: C.muted, gridRow: 1, gridColumn: 2 }}>vs</div>
+      </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-          <button style={{ ...S.btn, flex: 1, opacity: ready ? 1 : 0.3, cursor: ready ? "pointer" : "not-allowed" }} onClick={submit} disabled={!ready}>
-            {submitting ? "Logging…" : "Log Match"}
-          </button>
-          <button style={S.btnGhost} onClick={() => { setP1(""); setP2(""); setS1(""); setS2(""); setApiError(""); }}>Clear</button>
+      {/* Win probability bar */}
+      <div style={{ ...S.label, marginBottom: 7 }}>Win Probability</div>
+      <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", height: 28, marginBottom: 4 }}>
+        <div style={{ flex: pctP1, background: "#E6F1FB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#0C447C" }}>
+          {pctP1 > 15 ? `${pctP1}%` : ""}
+        </div>
+        <div style={{ flex: pctP2, background: "#FAEEDA", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#633806" }}>
+          {pctP2 > 15 ? `${pctP2}%` : ""}
         </div>
       </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.muted, marginBottom: 2 }}>
+        <span>{p1} {pctP1}%</span><span>{p2} {pctP2}%</span>
+      </div>
+
+      {divider}
+
+      {/* H2H */}
+      <div style={{ ...S.label, marginBottom: 10 }}>Head to Head</div>
+      {h2hAll.length === 0 ? (
+        <div style={{ fontSize: 12, color: C.muted, textAlign: "center", padding: "8px 0" }}>No matches played yet — first time facing each other!</div>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: C.text }}>{winsP1}</div>
+              <div style={{ fontSize: 11, color: C.muted }}>{p1} wins</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>{h2hAll.length} played</div>
+              {streakWinner && streak >= 2 && (
+                <div style={{ background: "#E1F5EE", color: "#085041", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>
+                  {streakWinner} +{streak} streak
+                </div>
+              )}
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: C.text }}>{winsP2}</div>
+              <div style={{ fontSize: 11, color: C.muted }}>{p2} wins</div>
+            </div>
+          </div>
+          {underdogH2hNote && (
+            <div style={{ fontSize: 11, color: C.muted, textAlign: "center", marginTop: 8 }}>{underdogH2hNote}</div>
+          )}
+        </>
+      )}
+
+      {divider}
+
+      {/* Form */}
+      <div style={{ ...S.label, marginBottom: 10 }}>Recent Form (last 5)</div>
+      {[{ name: p1, form: formP1 }, { name: p2, form: formP2 }].map(({ name, form: f }) => (
+        <div key={name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, color: C.muted, width: 60, flexShrink: 0 }}>{name}</div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {f.length === 0
+              ? <span style={{ fontSize: 11, color: C.muted }}>No matches yet</span>
+              : f.map((r, i) => (
+                <div key={i} style={{ width: 22, height: 22, borderRadius: "50%", background: r === "W" ? "#EAF3DE" : "#FCEBEB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: r === "W" ? "#27500A" : "#791F1F" }}>
+                  {r}
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      ))}
+
+      {divider}
+
+      {/* Stakes */}
+      <div style={{ background: C.surfaceHi, borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: C.muted }}>ELO on the line</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>up to ±{maxStake} pts</div>
+      </div>
+
+      {/* Score entry */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        {[{ lbl: p1, val: s1, set: setS1, ph: "11" }, { lbl: p2, val: s2, set: setS2, ph: "7" }].map(({ lbl, val, set, ph }) => (
+          <div key={lbl}>
+            <label style={S.label}>{lbl} Score</label>
+            <input style={{ ...S.input, borderColor: entered && !scoreOk ? C.red : C.borderHi }} type="number" inputMode="numeric" min={0} max={50} value={val} onChange={e => set(e.target.value)} placeholder={ph} />
+          </div>
+        ))}
+      </div>
+      {entered && !scoreOk && <div style={{ fontSize: 12, color: C.red, marginBottom: 10 }}>✗ Win by 2 with ≥11 pts (e.g. 11–7, 12–10)</div>}
+      {apiError && <ErrorBanner msg={apiError} />}
+
+      <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+        <button onClick={onBack} style={{ ...S.btnGhost, color: C.muted, borderColor: C.borderHi, padding: "14px 16px" }}>←</button>
+        <button onClick={submit} disabled={!scoreOk || submitting} style={{ ...S.btn, flex: 1, opacity: scoreOk && !submitting ? 1 : 0.3, cursor: scoreOk && !submitting ? "pointer" : "not-allowed" }}>
+          {submitting ? "Logging…" : "Submit Result"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// LOG MATCH
+// ════════════════════════════════════════════════════════════════════════════════
+function LogMatch({ players, matches, onLogged }) {
+  const [p1, setP1] = useState("");
+  const [p2, setP2] = useState("");
+  const [step, setStep] = useState("select"); // "select" | "preview"
+  const [toast, setToast] = useState("");
+
+  const names = players.map(p => p.name).sort();
+  const playerMap = useMemo(() => Object.fromEntries(players.map(p => [p.name, p])), [players]);
+
+  useEffect(() => {
+    if (p1 && p2 && p1 !== p2) setStep("preview");
+    else setStep("select");
+  }, [p1, p2]);
+
+  function handleLogged() {
+    setToast("✓ Match logged!");
+    setP1(""); setP2(""); setStep("select");
+    setTimeout(() => setToast(""), 4000);
+    onLogged();
+  }
+
+  return (
+    <>
+      <div style={S.sectionHead}>Match</div>
+      {toast && <div style={{ ...S.card, borderColor: "#2a6a2a", background: "#102010", color: C.green, fontSize: 13 }}>{toast}</div>}
+
+      {step === "select" && (
+        <div style={S.card}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[{ lbl: "Player 1", val: p1, set: setP1, excl: p2 }, { lbl: "Player 2", val: p2, set: setP2, excl: p1 }].map(({ lbl, val, set, excl }) => (
+              <div key={lbl}>
+                <label style={S.label}>{lbl}</label>
+                <select style={S.select} value={val} onChange={e => set(e.target.value)}>
+                  <option value="">Select…</option>
+                  {names.filter(n => n !== excl).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+          {players.length < 2 && <div style={{ marginTop: 12, fontSize: 12, color: C.muted }}>Add at least 2 players on the Board tab first.</div>}
+        </div>
+      )}
+
+      {step === "preview" && (
+        <MatchPreview
+          p1={p1} p2={p2}
+          playerMap={playerMap}
+          matches={matches}
+          onBack={() => setStep("select")}
+          onLogged={handleLogged}
+        />
+      )}
     </>
   );
 }
@@ -601,7 +730,7 @@ export default function App() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const content = () => {
-    if (tab === "log")     return <LogMatch players={players} onLogged={fetchAll} />;
+    if (tab === "log")     return <LogMatch players={players} matches={matches} onLogged={fetchAll} />;
     if (tab === "players") return <PlayersPage players={players} loading={loading} error={error} onRetry={fetchAll} onAdded={fetchAll} />;
     if (tab === "history") return <MatchHistory matches={matches} onDeleted={fetchAll} isAdmin={isAdmin} adminToken={adminToken} />;
     if (tab === "stats")   return <PlayerStats players={players} matches={matches} />;
@@ -638,7 +767,7 @@ export default function App() {
       )}
 
       {/* Header */}
-      <div style={{ background: "#28284a", borderBottom: `1px solid ${C.border}`, padding: isMobile ? "13px 16px" : "13px 24px", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
+      <div style={{ background: "#1A1A18", borderBottom: `1px solid ${C.border}`, padding: isMobile ? "13px 16px" : "13px 24px", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: C.text, letterSpacing: "-0.5px" }}>SQUASH ELO</div>
         {!isMobile && (
           <nav style={{ display: "flex", gap: 4, marginLeft: 16 }}>
@@ -667,7 +796,7 @@ export default function App() {
 
       {/* Mobile bottom nav */}
       {isMobile && (
-        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 20, background: "#28284a", borderTop: `1px solid ${C.border}`, display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 20, background: "#1A1A18", borderTop: `1px solid ${C.border}`, display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           {TABS.map(t => {
             const active = tab === t.id;
             return (

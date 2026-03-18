@@ -65,10 +65,6 @@ def init_db():
                 ON matches(date, p1, p2, s1, s2, created);
         """)
 
-        # Seed players (safe — UNIQUE constraint on name)
-        for name in ["Emil", "Peder", "Henrik"]:
-            conn.execute("INSERT OR IGNORE INTO players (name) VALUES (?)", (name,))
-
         conn.commit()
     finally:
         conn.close()
@@ -216,6 +212,15 @@ def log_match(body: NewMatch):
     computed, _ = compute_state(rows, names)
     new_match = next((m for m in computed if m["id"] == new_id), None)
     return new_match
+
+
+@app.post("/api/reset", status_code=200)
+def reset_db():
+    with get_db() as db:
+        db.execute("DELETE FROM matches")
+        db.execute("DELETE FROM players")
+        db.execute("DELETE FROM sqlite_sequence WHERE name IN ('matches','players')")
+    return {"status": "reset"}
 
 
 @app.delete("/api/matches/{match_id}", status_code=200)

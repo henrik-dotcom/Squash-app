@@ -1231,11 +1231,9 @@ function SeasonPage() {
 const TABS = [
   { id: "log",     icon: "+", label: "Match"     },
   { id: "players", icon: "⬡", label: "Board"     },
-  { id: "stats",   icon: "◎", label: "Stats"     },
-  { id: "h2h",     icon: "⇄", label: "H2H"       },
-  { id: "history", icon: "≡", label: "Match Log" },
   { id: "season",  icon: "⚑", label: "Season"    },
   { id: "edge",    icon: "◈", label: "Edge"      },
+  { id: "history", icon: "≡", label: "Match Log" },
 ];
 
 export default function App() {

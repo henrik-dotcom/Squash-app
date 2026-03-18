@@ -42,9 +42,9 @@ function useIsMobile() {
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 const C = {
-  bg: "#0a0a0f", surface: "#111120", surfaceHi: "#161628",
-  border: "#1e1e2e", borderHi: "#2a2a3e",
-  text: "#e8e8f0", muted: "#555",
+  bg: "#20203a", surface: "#2e2e52", surfaceHi: "#38386a",
+  border: "#48487a", borderHi: "#5a5a96",
+  text: "#ffffff", muted: "#b0b0d8",
   accent: "#88aaff", green: "#44ff77", red: "#ff4455", orange: "#ff8855", blue: "#4488ff",
 };
 const FONT = "'DM Mono','Courier New',monospace";
@@ -52,8 +52,8 @@ const FONT = "'DM Mono','Courier New',monospace";
 const S = {
   card: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, marginBottom: 12 },
   label: { display: "block", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 6, fontWeight: 700 },
-  input: { background: "#0d0d18", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", fontFamily: FONT, WebkitAppearance: "none" },
-  select: { background: "#0d0d18", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 38px 13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", cursor: "pointer", fontFamily: FONT, WebkitAppearance: "none", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23555' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" },
+  input: { background: "#2a2a4e", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", fontFamily: FONT, WebkitAppearance: "none" },
+  select: { background: "#2a2a4e", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 38px 13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", cursor: "pointer", fontFamily: FONT, WebkitAppearance: "none", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7a9a' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" },
   btn: { background: C.accent, color: "#0a0a0f", border: "none", borderRadius: 8, padding: "14px 24px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", letterSpacing: "0.04em", touchAction: "manipulation" },
   btnSmall: { background: "transparent", color: C.accent, border: `1px solid ${C.accent}`, borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
   btnGhost: { background: "transparent", color: C.red, border: `1px solid ${C.red}`, borderRadius: 8, padding: "14px 20px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
@@ -62,7 +62,7 @@ const S = {
 };
 
 function badge(type) {
-  const m = { green: [C.green, "#0d2e0d", "#1a4a1a"], red: [C.red, "#2e0d0d", "#4a1a1a"], neutral: ["#888", "#1a1a2e", C.borderHi] };
+  const m = { green: [C.green, "#1a3a1a", "#2a5a2a"], red: [C.red, "#3a1a1a", "#5a2a2a"], neutral: ["#888", C.surface, C.borderHi] };
   const [color, bg, border] = m[type] || m.neutral;
   return { display: "inline-block", padding: "3px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color, background: bg, border: `1px solid ${border}` };
 }
@@ -84,7 +84,7 @@ function EloBar({ elo }) {
   const pct = Math.min(100, Math.max(0, ((elo - 800) / 600) * 100));
   const col = elo >= 1100 ? C.accent : elo >= 1000 ? C.blue : C.red;
   return (
-    <div style={{ width: "100%", height: 3, background: "#1a1a2e", borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
+    <div style={{ width: "100%", height: 3, background: C.border, borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
       <div style={{ width: `${pct}%`, height: "100%", background: col, borderRadius: 2 }} />
     </div>
   );
@@ -105,48 +105,13 @@ function Spinner() {
 
 function ErrorBanner({ msg, onRetry }) {
   return (
-    <div style={{ ...S.card, borderColor: "#4a1a1a", background: "#1a0808", color: C.red, fontSize: 13 }}>
+    <div style={{ ...S.card, borderColor: "#6a2a2a", background: "#2e1010", color: C.red, fontSize: 13 }}>
       ✗ {msg}
       {onRetry && <button onClick={onRetry} style={{ marginLeft: 12, background: "none", border: "none", color: C.accent, cursor: "pointer", fontFamily: FONT, fontSize: 13 }}>Retry</button>}
     </div>
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════════════
-// LEADERBOARD
-// ════════════════════════════════════════════════════════════════════════════════
-function Leaderboard({ players, loading, error, onRetry }) {
-  const medals = ["🥇", "🥈", "🥉"];
-  return (
-    <>
-      <div style={S.sectionHead}>Leaderboard</div>
-      {loading && <Spinner />}
-      {error && <ErrorBanner msg={error} onRetry={onRetry} />}
-      {!loading && !error && (
-        <div style={S.card}>
-          {players.map((p, i) => (
-            <div key={p.name} style={{ ...S.row(i === players.length - 1), opacity: p.matches === 0 ? 0.38 : 1 }}>
-              <div style={{ width: 26, textAlign: "center", flexShrink: 0, fontSize: i < 3 ? 18 : 13, color: i >= 3 ? C.muted : undefined, fontWeight: 700 }}>
-                {i < 3 ? medals[i] : i + 1}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-                <EloBar elo={p.elo} />
-              </div>
-              <Sparkline history={p.history} />
-              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: p.elo >= 1100 ? C.accent : p.elo >= 1000 ? C.text : C.orange }}>{p.elo.toFixed(0)}</div>
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                  <span style={{ color: C.green }}>{p.wins}W</span> · <span style={{ color: C.red }}>{p.losses}L</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
 
 // ════════════════════════════════════════════════════════════════════════════════
 // LOG MATCH
@@ -198,7 +163,7 @@ function LogMatch({ players, onLogged }) {
   return (
     <>
       <div style={S.sectionHead}>Log Match</div>
-      {toast && <div style={{ ...S.card, borderColor: "#1a4a1a", background: "#081408", color: C.green, fontSize: 13 }}>{toast}</div>}
+      {toast && <div style={{ ...S.card, borderColor: "#2a6a2a", background: "#102010", color: C.green, fontSize: 13 }}>{toast}</div>}
       {apiError && <ErrorBanner msg={apiError} />}
 
       <div style={S.card}>
@@ -226,7 +191,7 @@ function LogMatch({ players, onLogged }) {
         {entered && !scoreOk && <div style={{ marginTop: 10, fontSize: 12, color: C.red, lineHeight: 1.5 }}>✗ Invalid — win by 2 with ≥11 pts (e.g. 11–7, 12–10, 15–13)</div>}
 
         {preview && (
-          <div style={{ marginTop: 14, padding: 14, background: "#0d0d18", borderRadius: 8, border: `1px solid ${C.border}` }}>
+          <div style={{ marginTop: 14, padding: 14, background: C.bg, borderRadius: 8, border: `1px solid ${C.border}` }}>
             <div style={{ ...S.label, marginBottom: 10 }}>ELO Preview</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {[{ name: p1, pre: preview.r1, post: preview.p1post, exp: preview.expP1 }, { name: p2, pre: preview.r2, post: preview.p2post, exp: 1 - preview.expP1 }].map(({ name, pre, post, exp }) => {
@@ -260,13 +225,14 @@ function LogMatch({ players, onLogged }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// ADD PLAYER
+// PLAYERS PAGE (roster + add player)
 // ════════════════════════════════════════════════════════════════════════════════
-function AddPlayer({ onAdded }) {
+function PlayersPage({ players, loading, error, onRetry, onAdded }) {
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
   const [apiError, setApiError] = useState("");
+  const medals = ["🥇", "🥈", "🥉"];
 
   async function submit() {
     const trimmed = name.trim();
@@ -290,8 +256,39 @@ function AddPlayer({ onAdded }) {
 
   return (
     <>
+      <div style={S.sectionHead}>Leaderboard</div>
+      {loading && <Spinner />}
+      {error && <ErrorBanner msg={error} onRetry={onRetry} />}
+      {!loading && !error && (
+        <div style={S.card}>
+          {players.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 24 }}>No players yet — add one below.</div>}
+          {players.map((p, i) => (
+            <div key={p.name} style={S.row(i === players.length - 1)}>
+              <div style={{ width: 26, textAlign: "center", flexShrink: 0, fontSize: i < 3 ? 18 : 13, color: i >= 3 ? C.muted : undefined, fontWeight: 700 }}>
+                {i < 3 ? medals[i] : i + 1}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                <EloBar elo={p.elo} />
+              </div>
+              <Sparkline history={p.history} />
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{p.elo.toFixed(0)}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                  <span style={{ color: C.green }}>{p.wins}W</span>
+                  {" · "}
+                  <span style={{ color: C.red }}>{p.losses}L</span>
+                  {" · "}
+                  <span>{p.matches > 0 ? `${(p.wins / p.matches * 100).toFixed(0)}%` : "—"}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={S.sectionHead}>Add Player</div>
-      {toast && <div style={{ ...S.card, borderColor: "#1a3a4a", background: "#081014", color: C.accent, fontSize: 13 }}>{toast}</div>}
+      {toast && <div style={{ ...S.card, borderColor: "#2a4a6a", background: "#101828", color: C.accent, fontSize: 13 }}>{toast}</div>}
       {apiError && <ErrorBanner msg={apiError} />}
       <div style={S.card}>
         <label style={S.label}>Player Name</label>
@@ -479,16 +476,75 @@ function HeadToHead({ players, matches }) {
 // ════════════════════════════════════════════════════════════════════════════════
 // APP
 // ════════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
+// MATCH HISTORY
+// ════════════════════════════════════════════════════════════════════════════════
+function MatchHistory({ matches, onDeleted }) {
+  const [deleting, setDeleting] = useState(null);
+
+  async function del(id) {
+    setDeleting(id);
+    try {
+      await apiFetch(`/matches/${id}`, { method: "DELETE" });
+      onDeleted();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  const valid = [...matches].filter(m => m.valid).reverse();
+
+  return (
+    <>
+      <div style={S.sectionHead}>Match History</div>
+      {valid.length === 0 && (
+        <div style={{ ...S.card, color: C.muted, textAlign: "center", padding: 36, fontSize: 13 }}>No matches logged yet.</div>
+      )}
+      {valid.length > 0 && (
+        <div style={S.card}>
+          {valid.map((m, i) => {
+            const score = `${Math.max(m.s1, m.s2)}–${Math.min(m.s1, m.s2)}`;
+            const winnerIsP1 = m.winner === m.p1;
+            return (
+              <div key={m.id} style={{ ...S.row(i === valid.length - 1), gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: winnerIsP1 ? C.text : C.muted }}>{m.p1}</span>
+                    <span style={{ fontSize: 12, color: C.muted }}>vs</span>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: !winnerIsP1 ? C.text : C.muted }}>{m.p2}</span>
+                    <span style={{ ...badge("neutral"), fontSize: 12 }}>{score}</span>
+                    <span style={{ ...badge("green"), fontSize: 11 }}>W: {m.winner}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{m.date}</div>
+                </div>
+                <button
+                  onClick={() => del(m.id)}
+                  disabled={deleting === m.id}
+                  style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 6, color: C.muted, cursor: "pointer", fontSize: 12, padding: "5px 10px", fontFamily: FONT, flexShrink: 0, opacity: deleting === m.id ? 0.4 : 1 }}
+                >
+                  {deleting === m.id ? "…" : "✕"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
 const TABS = [
-  { id: "leaderboard", icon: "⬡", label: "Board" },
-  { id: "log",         icon: "+",  label: "Log"   },
-  { id: "players",     icon: "●",  label: "Players" },
-  { id: "stats",       icon: "◎",  label: "Stats" },
-  { id: "h2h",         icon: "⇄",  label: "H2H"   },
+  { id: "log",     icon: "+", label: "Match"     },
+  { id: "players", icon: "⬡", label: "Board"     },
+  { id: "stats",   icon: "◎", label: "Stats"     },
+  { id: "h2h",     icon: "⇄", label: "H2H"       },
+  { id: "history", icon: "≡", label: "Match Log" },
 ];
 
 export default function App() {
-  const [tab, setTab] = useState("leaderboard");
+  const [tab, setTab] = useState("log");
   const isMobile = useIsMobile();
 
   const [players, setPlayers] = useState([]);
@@ -512,9 +568,9 @@ export default function App() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const content = () => {
-    if (tab === "leaderboard") return <Leaderboard players={players} loading={loading} error={error} onRetry={fetchAll} />;
-    if (tab === "log")         return <LogMatch players={players} onLogged={fetchAll} />;
-    if (tab === "players")     return <AddPlayer onAdded={fetchAll} />;
+    if (tab === "log")     return <LogMatch players={players} onLogged={fetchAll} />;
+    if (tab === "players") return <PlayersPage players={players} loading={loading} error={error} onRetry={fetchAll} onAdded={fetchAll} />;
+    if (tab === "history")     return <MatchHistory matches={matches} onDeleted={fetchAll} />;
     if (tab === "stats")       return <PlayerStats players={players} matches={matches} />;
     if (tab === "h2h")         return <HeadToHead players={players} matches={matches} />;
   };
@@ -523,21 +579,21 @@ export default function App() {
     <div style={{ fontFamily: FONT, background: C.bg, minHeight: "100vh", color: C.text, paddingBottom: isMobile ? 72 : 0 }}>
 
       {/* Header */}
-      <div style={{ background: "#0d0d18", borderBottom: `1px solid ${C.border}`, padding: isMobile ? "13px 16px" : "13px 24px", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
+      <div style={{ background: "#28284a", borderBottom: `1px solid ${C.border}`, padding: isMobile ? "13px 16px" : "13px 24px", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: C.text, letterSpacing: "-0.5px" }}>SQUASH ELO</div>
-        {/* Export button */}
-        <a href={`${API}/api/export`} style={{ marginLeft: isMobile ? "auto" : 16, fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
-          ↓ xlsx
-        </a>
         {!isMobile && (
           <nav style={{ display: "flex", gap: 4, marginLeft: 16 }}>
             {TABS.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "7px 16px", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", border: tab === t.id ? `1px solid ${C.accent}` : `1px solid ${C.borderHi}`, background: tab === t.id ? C.accent : "transparent", color: tab === t.id ? "#0a0a0f" : "#888", cursor: "pointer", borderRadius: 6, fontFamily: FONT, fontWeight: tab === t.id ? 700 : 400 }}>
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "7px 16px", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", border: tab === t.id ? `1px solid ${C.accent}` : `1px solid ${C.borderHi}`, background: tab === t.id ? C.accent : "transparent", color: tab === t.id ? "#12121f" : C.muted, cursor: "pointer", borderRadius: 6, fontFamily: FONT, fontWeight: tab === t.id ? 700 : 400 }}>
                 {t.label}
               </button>
             ))}
           </nav>
         )}
+        {/* Export button — always top right */}
+        <a href={`${API}/api/export`} style={{ marginLeft: "auto", fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
+          ↓ xlsx
+        </a>
       </div>
 
       {/* Content */}
@@ -547,7 +603,7 @@ export default function App() {
 
       {/* Mobile bottom nav */}
       {isMobile && (
-        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 20, background: "#0d0d18", borderTop: `1px solid ${C.border}`, display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 20, background: "#28284a", borderTop: `1px solid ${C.border}`, display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           {TABS.map(t => {
             const active = tab === t.id;
             return (

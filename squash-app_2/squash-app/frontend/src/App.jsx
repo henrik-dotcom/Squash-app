@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 
 // ─── API ──────────────────────────────────────────────────────────────────────
-// After deploying to Railway, replace the empty string with your Railway URL.
-// Example: const API = "https://squash-elo-production.up.railway.app"
+// For unified deployment (FastAPI serves frontend), leave VITE_API_URL unset.
+// For separate deployment (e.g. Netlify), set VITE_API_URL to your Railway URL.
 const API = import.meta.env.VITE_API_URL ?? "";
 
 async function apiFetch(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(`${API}/api${path}`, {
     headers: { "Content-Type": "application/json" },
     ...opts,
   });
@@ -465,7 +465,7 @@ export default function App() {
       <div style={{ background: "#0d0d18", borderBottom: `1px solid ${C.border}`, padding: isMobile ? "13px 16px" : "13px 24px", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: C.lime, letterSpacing: "-0.5px" }}>◈ SQUASH ELO</div>
         {/* Export button */}
-        <a href={`${API}/export`} style={{ marginLeft: isMobile ? "auto" : 16, fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
+        <a href={`${API}/api/export`} style={{ marginLeft: isMobile ? "auto" : 16, fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
           ↓ xlsx
         </a>
         {!isMobile && (

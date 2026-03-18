@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import pathlib
 from datetime import date
 from contextlib import contextmanager
 from typing import Optional
@@ -7,6 +8,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # ─── App setup ────────────────────────────────────────────────────────────────
@@ -168,12 +170,12 @@ class NewPlayer(BaseModel):
     name: str
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
-@app.get("/")
+@app.get("/api")
 def root():
     return {"status": "ok", "service": "Squash ELO API"}
 
 
-@app.get("/players")
+@app.get("/api/players")
 def get_players():
     with get_db() as db:
         rows       = db.execute("SELECT name FROM players ORDER BY name").fetchall()
@@ -183,7 +185,7 @@ def get_players():
     return sorted(stats.values(), key=lambda x: -x["elo"])
 
 
-@app.post("/players", status_code=201)
+@app.post("/api/players", status_code=201)
 def add_player(body: NewPlayer):
     name = body.name.strip()
     if not name:
@@ -195,7 +197,7 @@ def add_player(body: NewPlayer):
     return {"name": name}
 
 
-@app.get("/matches")
+@app.get("/api/matches")
 def get_matches():
     with get_db() as db:
         rows  = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
@@ -204,7 +206,7 @@ def get_matches():
     return computed
 
 
-@app.post("/matches", status_code=201)
+@app.post("/api/matches", status_code=201)
 def log_match(body: NewMatch):
     if body.p1 == body.p2:
         raise HTTPException(400, "Players must be different")
@@ -231,7 +233,7 @@ def log_match(body: NewMatch):
     return new_match
 
 
-@app.delete("/matches/{match_id}", status_code=200)
+@app.delete("/api/matches/{match_id}", status_code=200)
 def delete_match(match_id: int):
     with get_db() as db:
         if not db.execute("SELECT id FROM matches WHERE id=?", (match_id,)).fetchone():
@@ -240,7 +242,7 @@ def delete_match(match_id: int):
     return {"deleted": match_id}
 
 
-@app.get("/stats")
+@app.get("/api/stats")
 def get_stats():
     with get_db() as db:
         match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
@@ -252,7 +254,7 @@ def get_stats():
     }
 
 
-@app.get("/export")
+@app.get("/api/export")
 def export_excel():
     try:
         import openpyxl
@@ -307,3 +309,9 @@ def export_excel():
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=squash_elo.xlsx"}
     )
+
+
+# ─── Serve frontend static files (must come after all API routes) ────────────
+STATIC_DIR = pathlib.Path(__file__).parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

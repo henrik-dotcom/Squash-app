@@ -81,10 +81,12 @@ def get_k(elo: float, match_count: int) -> int:
     if match_count >= 30: return 20
     return 40
 
-def calc_elo(r_a: float, r_b: float, won: bool, mc: int) -> float:
+def calc_elo(r_a: float, r_b: float, won: bool, mc: int, s_a: int, s_b: int) -> float:
     expected = 1 / (1 + 10 ** ((r_b - r_a) / 400))
     k = get_k(r_a, mc)
-    return round(r_a + k * ((1 if won else 0) - expected), 1)
+    margin = abs(s_a - s_b)
+    multiplier = 1 + margin / max(s_a, s_b)
+    return round(r_a + k * multiplier * ((1 if won else 0) - expected), 1)
 
 def compute_state(matches_rows, player_names):
     ratings = {n: 1000.0 for n in player_names}
@@ -113,8 +115,8 @@ def compute_state(matches_rows, player_names):
             continue
 
         p1wins = s1 > s2
-        p1post = calc_elo(p1pre, p2pre, p1wins, counts[p1])
-        p2post = calc_elo(p2pre, p1pre, not p1wins, counts[p2])
+        p1post = calc_elo(p1pre, p2pre, p1wins, counts[p1], s1, s2)
+        p2post = calc_elo(p2pre, p1pre, not p1wins, counts[p2], s2, s1)
 
         ratings[p1] = p1post
         ratings[p2] = p2post

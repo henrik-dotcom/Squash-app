@@ -2,7 +2,7 @@ import sqlite3
 import os
 import pathlib
 import secrets
-from datetime import date
+from datetime import date, datetime, timedelta
 from contextlib import contextmanager
 from typing import Optional
 
@@ -154,6 +154,190 @@ def compute_state(matches_rows, player_names):
             s["elo"] = post
 
     return out, stats
+
+
+# ─── Season helpers ───────────────────────────────────────────────────────────
+_SEASON_NAMES = {"Q1": "Winter", "Q2": "Spring", "Q3": "Summer", "Q4": "Autumn"}
+_SEASON_STARTS = {"Q1": (1, 1), "Q2": (4, 1), "Q3": (7, 1), "Q4": (10, 1)}
+_SEASON_ENDS   = {"Q1": (3, 31), "Q2": (6, 30), "Q3": (9, 30), "Q4": (12, 31)}
+
+def get_season_id(date_str: str) -> str:
+    d = datetime.strptime(date_str, "%Y-%m-%d")
+    q = (d.month - 1) // 3 + 1
+    return f"{d.year}-Q{q}"
+
+def get_season_name(sid: str) -> str:
+    year, q = sid.split("-")
+    return f"{_SEASON_NAMES[q]} {year}"
+
+def get_season_dates(sid: str) -> tuple:
+    year, q = sid.split("-")
+    yr = int(year)
+    s = _SEASON_STARTS[q]; e = _SEASON_ENDS[q]
+    return f"{yr}-{s[0]:02d}-{s[1]:02d}", f"{yr}-{e[0]:02d}-{e[1]:02d}"
+
+def current_season_id() -> str:
+    return get_season_id(str(date.today()))
+
+
+def compute_seasons(match_rows, player_names: list) -> dict:
+    """Return per-season ELO standings with soft resets between seasons."""
+    # Group matches by season
+    seasons_matches: dict = {}
+    for m in match_rows:
+        sid = get_season_id(m["date"])
+        seasons_matches.setdefault(sid, []).append(m)
+
+    # Ensure current season is always present
+    cur_sid = current_season_id()
+    seasons_matches.setdefault(cur_sid, [])
+
+    # Sort seasons chronologically
+    sorted_sids = sorted(seasons_matches.keys())
+
+    # Carry-over ELOs between seasons (starts at 1000 for new players)
+    carry: dict = {}  # name → elo at end of previous season
+
+    seasons_out = {}
+    for sid in sorted_sids:
+        s_matches = seasons_matches[sid]
+
+        # Compute season-start ELOs (after soft reset)
+        season_start: dict = {}
+        for name in player_names:
+            prev = carry.get(name)
+            if prev is None:
+                season_start[name] = 1000.0
+            else:
+                season_start[name] = round(prev + (1200 - prev) * 0.3, 1)
+
+        # Run ELO compute with season-start values
+        # We need to seed ratings with season_start ELOs; reuse compute_state logic inline
+        ratings = dict(season_start)
+        counts  = {n: 0 for n in player_names}
+        player_stats = {
+            n: {"name": n, "elo": season_start[n], "season_start_elo": season_start[n],
+                "wins": 0, "losses": 0, "matches": 0, "peak": season_start[n]}
+            for n in player_names
+        }
+
+        # Track streak per player (list of W/L for this season)
+        streak_seq: dict = {n: [] for n in player_names}
+        # Track giant killer (wins vs higher pre-match ELO)
+        giant_kills: dict = {n: 0 for n in player_names}
+        # Track peak elo within season
+        computed_season_matches = []
+
+        for m in s_matches:
+            p1, p2, s1, s2 = m["p1"], m["p2"], m["s1"], m["s2"]
+            is_valid = (p1 != p2 and p1 in ratings and p2 in ratings
+                        and validate_score(s1, s2))
+            if not is_valid:
+                computed_season_matches.append({"id": m["id"], "valid": False,
+                    "p1": p1, "p2": p2, "s1": s1, "s2": s2,
+                    "p1pre": ratings.get(p1, 1000.0), "p2pre": ratings.get(p2, 1000.0),
+                    "winner": None})
+                continue
+
+            p1pre = ratings[p1]; p2pre = ratings[p2]
+            p1wins = s1 > s2
+            p1post = calc_elo(p1pre, p2pre, p1wins,  counts[p1], s1, s2)
+            p2post = calc_elo(p2pre, p1pre, not p1wins, counts[p2], s2, s1)
+
+            winner = p1 if p1wins else p2
+            loser  = p2 if p1wins else p1
+
+            computed_season_matches.append({"id": m["id"], "valid": True,
+                "p1": p1, "p2": p2, "s1": s1, "s2": s2,
+                "p1pre": p1pre, "p2pre": p2pre, "winner": winner})
+
+            # Giant killer: winner beat someone with higher pre-match ELO
+            winner_pre = p1pre if p1wins else p2pre
+            loser_pre  = p2pre if p1wins else p1pre
+            if loser_pre > winner_pre:
+                giant_kills[winner] += 1
+
+            for pname, post, won in [(p1, p1post, p1wins), (p2, p2post, not p1wins)]:
+                ratings[pname] = post
+                counts[pname] += 1
+                st = player_stats[pname]
+                st["matches"] += 1
+                st["elo"] = post
+                st["peak"] = max(st["peak"], post)
+                if won: st["wins"] += 1
+                else:   st["losses"] += 1
+                streak_seq[pname].append("W" if won else "L")
+
+        # Compute streak for each player (current run at end of season)
+        for name, seq in streak_seq.items():
+            s = 0
+            if seq:
+                last = seq[-1]
+                for r in reversed(seq):
+                    if r == last: s += 1
+                    else: break
+                player_stats[name]["streak"] = s if last == "W" else -s
+            else:
+                player_stats[name]["streak"] = 0
+            player_stats[name]["giant_kills"] = giant_kills[name]
+            player_stats[name]["delta"] = round(
+                player_stats[name]["elo"] - player_stats[name]["season_start_elo"], 1)
+
+        # Carry ELOs forward
+        for name in player_names:
+            carry[name] = player_stats[name]["elo"]
+
+        start_date, end_date = get_season_dates(sid)
+        is_current = (sid == cur_sid)
+        today = date.today()
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+        days_remaining = max(0, (end_dt - today).days) if is_current else 0
+
+        seasons_out[sid] = {
+            "season_id": sid,
+            "name": get_season_name(sid),
+            "start": start_date,
+            "end": end_date,
+            "is_current": is_current,
+            "match_count": sum(1 for m in computed_season_matches if m["valid"]),
+            "days_remaining": days_remaining,
+            "players": player_stats,
+            "matches": computed_season_matches,
+        }
+
+    return seasons_out
+
+
+def compute_awards(season: dict, min_matches: int = 3) -> dict:
+    players = season["players"]
+    qualified = [p for p in players.values() if p["matches"] >= min_matches]
+
+    champion = max(players.values(), key=lambda p: p["elo"]) if players else None
+    most_improved = max(qualified, key=lambda p: p["delta"]) if qualified else None
+    most_active   = max(players.values(), key=lambda p: p["matches"]) if players else None
+    most_active   = most_active if most_active and most_active["matches"] >= 1 else None
+    giant_killer_candidates = [p for p in qualified if p["giant_kills"] > 0]
+    giant_killer  = max(giant_killer_candidates, key=lambda p: p["giant_kills"]) if giant_killer_candidates else None
+
+    def fmt(p, key):
+        if p is None: return None
+        if key == "champion":
+            return {"name": p["name"], "detail": f"{p['elo']:.0f} ELO"}
+        if key == "most_improved":
+            d = p["delta"]; sign = "+" if d >= 0 else ""
+            return {"name": p["name"], "detail": f"{sign}{d:.0f} ELO from season start"}
+        if key == "most_active":
+            return {"name": p["name"], "detail": f"{p['matches']} matches played"}
+        if key == "giant_killer":
+            return {"name": p["name"], "detail": f"{p['giant_kills']} wins vs. higher-ranked"}
+
+    return {
+        "champion":      fmt(champion, "champion"),
+        "most_improved": fmt(most_improved, "most_improved"),
+        "most_active":   fmt(most_active, "most_active"),
+        "giant_killer":  fmt(giant_killer, "giant_killer"),
+    }
+
 
 # ─── Models ───────────────────────────────────────────────────────────────────
 class NewMatch(BaseModel):
@@ -325,6 +509,66 @@ def export_excel():
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=squash_elo.xlsx"}
     )
+
+
+@app.get("/api/seasons")
+def get_seasons():
+    with get_db() as db:
+        match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
+        names      = [r["name"] for r in db.execute("SELECT name FROM players ORDER BY name").fetchall()]
+
+    if not names:
+        return []
+
+    seasons = compute_seasons(match_rows, names)
+
+    result = []
+    for sid in sorted(seasons.keys(), reverse=True):
+        s = seasons[sid]
+        players_sorted = sorted(s["players"].values(), key=lambda p: -p["elo"])
+        champion = players_sorted[0]["name"] if players_sorted and not s["is_current"] else None
+        result.append({
+            "season_id":    sid,
+            "name":         s["name"],
+            "start":        s["start"],
+            "end":          s["end"],
+            "is_current":   s["is_current"],
+            "match_count":  s["match_count"],
+            "champion":     champion,
+        })
+
+    return result
+
+
+@app.get("/api/seasons/{season_id}")
+def get_season(season_id: str):
+    with get_db() as db:
+        match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
+        names      = [r["name"] for r in db.execute("SELECT name FROM players ORDER BY name").fetchall()]
+
+    if not names:
+        raise HTTPException(404, "No players found")
+
+    seasons = compute_seasons(match_rows, names)
+    if season_id not in seasons:
+        raise HTTPException(404, f"Season '{season_id}' not found")
+
+    s = seasons[season_id]
+    standings = sorted(s["players"].values(), key=lambda p: -p["elo"])
+    for i, p in enumerate(standings):
+        p["rank"] = i + 1
+
+    return {
+        "season_id":     s["season_id"],
+        "name":          s["name"],
+        "start":         s["start"],
+        "end":           s["end"],
+        "is_current":    s["is_current"],
+        "days_remaining": s["days_remaining"],
+        "match_count":   s["match_count"],
+        "standings":     standings,
+        "awards":        compute_awards(s),
+    }
 
 
 # ─── Serve frontend static files (must come after all API routes) ────────────

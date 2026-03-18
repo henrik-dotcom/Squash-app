@@ -23,10 +23,11 @@ function validateScore(s1, s2) {
   if (isNaN(n1) || isNaN(n2) || n1 < 0 || n2 < 0) return false;
   return Math.max(n1, n2) >= 11 && Math.abs(n1 - n2) >= 2;
 }
-function calcEloPreview(rA, rB, won, mc) {
+function calcEloPreview(rA, rB, won, mc, sA, sB) {
   const k = rA >= 2000 ? 10 : mc >= 30 ? 20 : 40;
   const exp = 1 / (1 + Math.pow(10, (rB - rA) / 400));
-  return +(rA + k * ((won ? 1 : 0) - exp)).toFixed(1);
+  const multiplier = 1 + Math.abs(sA - sB) / Math.max(sA, sB);
+  return +(rA + k * multiplier * ((won ? 1 : 0) - exp)).toFixed(1);
 }
 
 // ─── useIsMobile ──────────────────────────────────────────────────────────────
@@ -138,7 +139,8 @@ function LogMatch({ players, onLogged }) {
     const m1 = playerMap[p1]?.matches ?? 0, m2 = playerMap[p2]?.matches ?? 0;
     const p1wins = parseInt(s1) > parseInt(s2);
     const expP1 = 1 / (1 + Math.pow(10, (r2 - r1) / 400));
-    return { r1, r2, p1wins, expP1, p1post: calcEloPreview(r1, r2, p1wins, m1), p2post: calcEloPreview(r2, r1, !p1wins, m2) };
+    const n1 = parseInt(s1), n2 = parseInt(s2);
+    return { r1, r2, p1wins, expP1, p1post: calcEloPreview(r1, r2, p1wins, m1, n1, n2), p2post: calcEloPreview(r2, r1, !p1wins, m2, n2, n1) };
   }, [p1, p2, s1, s2, ready, playerMap]);
 
   async function submit() {

@@ -668,12 +668,237 @@ function MatchHistory({ matches, onDeleted, isAdmin, adminToken }) {
   );
 }
 
+// ════════════════════════════════════════════════════════════════════════════════
+// SEASON PAGE
+// ════════════════════════════════════════════════════════════════════════════════
+function SeasonPage() {
+  const [subTab, setSubTab] = useState("standings");
+  const [seasons, setSeasons] = useState([]);
+  const [selectedSid, setSelectedSid] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch("/seasons")
+      .then(data => {
+        setSeasons(data);
+        if (data.length > 0) setSelectedSid(data[0].season_id);
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSid) return;
+    setDetailLoading(true);
+    apiFetch(`/seasons/${selectedSid}`)
+      .then(setDetail)
+      .catch(e => setError(e.message))
+      .finally(() => setDetailLoading(false));
+  }, [selectedSid]);
+
+  const initials = name => name.trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const AVATAR_COLORS = [
+    ["#1e3a5f", "#88aaff"], ["#1e3a2e", "#44cc88"], ["#3a1e2e", "#ff88aa"],
+    ["#2e1e3a", "#aa88ff"], ["#3a2e1e", "#ffaa44"],
+  ];
+
+  const fmtDate = d => {
+    if (!d) return "";
+    const [y, m, day] = d.split("-");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${months[parseInt(m)-1]} ${parseInt(day)}`;
+  };
+
+  const subTabStyle = (id) => ({
+    flex: 1, textAlign: "center", fontSize: 12, padding: "7px 0", borderRadius: 8,
+    cursor: "pointer", fontFamily: FONT,
+    background: subTab === id ? C.surfaceHi : "transparent",
+    color: subTab === id ? C.text : C.muted,
+    fontWeight: subTab === id ? 700 : 400,
+    border: subTab === id ? `1px solid ${C.border}` : "1px solid transparent",
+    letterSpacing: "0.04em",
+  });
+
+  const AWARD_DOTS = {
+    champion:      "#BA7517",
+    most_improved: "#44ff77",
+    most_active:   "#7F77DD",
+    giant_killer:  "#ff8855",
+  };
+  const AWARD_LABELS = {
+    champion: "Champion", most_improved: "Most Improved",
+    most_active: "Most Active", giant_killer: "Giant Killer",
+  };
+
+  if (loading) return <><div style={S.sectionHead}>Season</div><Spinner /></>;
+  if (error) return <><div style={S.sectionHead}>Season</div><ErrorBanner msg={error} /></>;
+  if (seasons.length === 0) return (
+    <>
+      <div style={S.sectionHead}>Season</div>
+      <div style={{ ...S.card, color: C.muted, textAlign: "center", padding: 36, fontSize: 13 }}>
+        No matches logged yet — play some games to start the season!
+      </div>
+    </>
+  );
+
+  const currentSeason = seasons.find(s => s.is_current) || seasons[0];
+  const pastSeasons = seasons.filter(s => !s.is_current && s.match_count > 0);
+
+  return (
+    <>
+      <div style={S.sectionHead}>Season</div>
+
+      {/* Sub-tabs */}
+      <div style={{ display: "flex", gap: 4, background: C.surface, borderRadius: 10, padding: 3, marginBottom: 16, border: `1px solid ${C.border}` }}>
+        {["standings", "hof", "awards"].map(id => (
+          <button key={id} onClick={() => setSubTab(id)} style={subTabStyle(id)}>
+            {id === "standings" ? "Standings" : id === "hof" ? "Hall of Fame" : "Awards"}
+          </button>
+        ))}
+      </div>
+
+      {/* STANDINGS */}
+      {subTab === "standings" && (
+        <>
+          {detailLoading && <Spinner />}
+          {detail && (
+            <>
+              {/* Season header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{detail.name}</div>
+                  <div style={{ fontSize: 11, color: C.tertiary, marginTop: 2 }}>
+                    {fmtDate(detail.start)} – {fmtDate(detail.end)} · {detail.match_count} match{detail.match_count !== 1 ? "es" : ""}
+                  </div>
+                </div>
+                <div style={{ background: C.surfaceHi, border: `1px solid ${C.border}`, borderRadius: 20, padding: "5px 12px", fontSize: 12, color: C.muted }}>
+                  {detail.is_current
+                    ? <><span style={{ fontWeight: 700, color: C.text }}>{detail.days_remaining}</span> days left</>
+                    : "Completed"}
+                </div>
+              </div>
+
+              {/* Standings list */}
+              {detail.standings.length === 0 ? (
+                <div style={{ ...S.card, color: C.muted, textAlign: "center", padding: 28, fontSize: 13 }}>
+                  No matches this season yet.
+                </div>
+              ) : (
+                <div style={S.card}>
+                  {detail.standings.map((p, i) => {
+                    const [avBg, avText] = AVATAR_COLORS[i % AVATAR_COLORS.length];
+                    const streak = p.streak;
+                    const streakStr = streak > 0 ? `↑${streak}` : streak < 0 ? `↓${Math.abs(streak)}` : "–";
+                    const streakColor = streak > 0 ? C.green : streak < 0 ? C.red : C.muted;
+                    return (
+                      <div key={p.name} style={S.row(i === detail.standings.length - 1)}>
+                        <div style={{ width: 20, textAlign: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: i === 0 ? "#BA7517" : C.muted }}>{i + 1}</div>
+                        <div style={{ width: 34, height: 34, borderRadius: "50%", background: avBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: avText, flexShrink: 0 }}>
+                          {initials(p.name)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{p.name}</div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                            <span style={{ color: C.green }}>{p.wins}W</span>
+                            {" · "}
+                            <span style={{ color: C.red }}>{p.losses}L</span>
+                            {" · "}
+                            <span style={{ color: streakColor }}>{streakStr}</span>
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{p.elo.toFixed(0)}</div>
+                          <div style={{ fontSize: 11, marginTop: 2, color: p.delta >= 0 ? C.green : C.red }}>
+                            {p.delta >= 0 ? "+" : ""}{p.delta.toFixed(0)} this season
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* HALL OF FAME */}
+      {subTab === "hof" && (
+        <>
+          {pastSeasons.length === 0 ? (
+            <div style={{ ...S.card, color: C.muted, textAlign: "center", padding: 36, fontSize: 13 }}>
+              No completed seasons yet — the Hall of Fame will fill up after the first season closes.
+            </div>
+          ) : (
+            pastSeasons.map(s => (
+              <div key={s.season_id}
+                onClick={() => { setSelectedSid(s.season_id); setSubTab("standings"); }}
+                style={{ ...S.card, display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}>
+                {/* Trophy */}
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: "#3a2a10", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 }}>
+                  🏆
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: C.tertiary, marginBottom: 2 }}>{s.name}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{s.champion || "—"}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{s.match_count} matches played</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, color: C.muted }}>Tap to view</div>
+                </div>
+              </div>
+            ))
+          )}
+        </>
+      )}
+
+      {/* AWARDS */}
+      {subTab === "awards" && (
+        <>
+          {detailLoading && <Spinner />}
+          {detail && (
+            <>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>{detail.name} — end of season awards</div>
+              <div style={{ fontSize: 11, color: C.tertiary, marginBottom: 14 }}>
+                {detail.is_current ? `Awarded when season closes ${fmtDate(detail.end)}` : "Final awards"}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {Object.entries(detail.awards).map(([key, award]) => (
+                  <div key={key} style={{ background: C.surfaceHi, borderRadius: 10, padding: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: AWARD_DOTS[key], flexShrink: 0 }} />
+                      <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.05em" }}>{AWARD_LABELS[key]}</div>
+                    </div>
+                    {award ? (
+                      <>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{award.name}</div>
+                        <div style={{ fontSize: 11, color: C.tertiary, marginTop: 2 }}>{award.detail}</div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize: 12, color: C.muted }}>—</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+
 const TABS = [
   { id: "log",     icon: "+", label: "Match"     },
   { id: "players", icon: "⬡", label: "Board"     },
   { id: "stats",   icon: "◎", label: "Stats"     },
   { id: "h2h",     icon: "⇄", label: "H2H"       },
   { id: "history", icon: "≡", label: "Match Log" },
+  { id: "season",  icon: "⚑", label: "Season"    },
 ];
 
 export default function App() {
@@ -735,6 +960,7 @@ export default function App() {
     if (tab === "history") return <MatchHistory matches={matches} onDeleted={fetchAll} isAdmin={isAdmin} adminToken={adminToken} />;
     if (tab === "stats")   return <PlayerStats players={players} matches={matches} />;
     if (tab === "h2h")     return <HeadToHead players={players} matches={matches} />;
+    if (tab === "season")  return <SeasonPage />;
   };
 
   return (

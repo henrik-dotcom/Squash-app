@@ -66,23 +66,8 @@ def init_db():
         """)
 
         # Seed players (safe — UNIQUE constraint on name)
-        for name in ["Alice","Bob","Charlie","Diana","Eve",
-                     "Frank","Grace","Henry","Iris","Jack"]:
+        for name in ["Emil", "Peder", "Henrik"]:
             conn.execute("INSERT OR IGNORE INTO players (name) VALUES (?)", (name,))
-
-        # Seed matches only if table is empty
-        count = conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
-        if count == 0:
-            seeds = [
-                ("2024-01-10", "Alice",   "Bob",     11, 7),
-                ("2024-01-10", "Charlie", "Alice",   11, 9),
-                ("2024-01-11", "Bob",     "Charlie", 11, 13),
-                ("2024-01-12", "Alice",   "Charlie", 11, 10),
-                ("2024-01-13", "Bob",     "Alice",   15, 13),
-            ]
-            conn.executemany(
-                "INSERT INTO matches (date,p1,p2,s1,s2) VALUES (?,?,?,?,?)", seeds
-            )
 
         conn.commit()
     finally:

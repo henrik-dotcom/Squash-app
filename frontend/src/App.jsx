@@ -45,7 +45,7 @@ const C = {
   bg: "#0a0a0f", surface: "#111120", surfaceHi: "#161628",
   border: "#1e1e2e", borderHi: "#2a2a3e",
   text: "#e8e8f0", muted: "#555",
-  lime: "#c8ff00", green: "#44ff77", red: "#ff4455", orange: "#ff8855", blue: "#4488ff",
+  accent: "#88aaff", green: "#44ff77", red: "#ff4455", orange: "#ff8855", blue: "#4488ff",
 };
 const FONT = "'DM Mono','Courier New',monospace";
 
@@ -54,9 +54,10 @@ const S = {
   label: { display: "block", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 6, fontWeight: 700 },
   input: { background: "#0d0d18", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", fontFamily: FONT, WebkitAppearance: "none" },
   select: { background: "#0d0d18", border: `1px solid ${C.borderHi}`, borderRadius: 8, padding: "13px 38px 13px 14px", color: C.text, fontSize: 16, width: "100%", outline: "none", boxSizing: "border-box", cursor: "pointer", fontFamily: FONT, WebkitAppearance: "none", appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23555' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center" },
-  btn: { background: C.lime, color: "#0a0a0f", border: "none", borderRadius: 8, padding: "14px 24px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", letterSpacing: "0.04em", touchAction: "manipulation" },
+  btn: { background: C.accent, color: "#0a0a0f", border: "none", borderRadius: 8, padding: "14px 24px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", letterSpacing: "0.04em", touchAction: "manipulation" },
+  btnSmall: { background: "transparent", color: C.accent, border: `1px solid ${C.accent}`, borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
   btnGhost: { background: "transparent", color: C.red, border: `1px solid ${C.red}`, borderRadius: 8, padding: "14px 20px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
-  sectionHead: { fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.lime, marginBottom: 14, fontWeight: 700 },
+  sectionHead: { fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted, marginBottom: 14, fontWeight: 700 },
   row: (last) => ({ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: last ? "none" : `1px solid ${C.border}` }),
 };
 
@@ -74,14 +75,14 @@ function Sparkline({ history, w = 44, h = 22 }) {
   const up = history[history.length - 1] >= history[history.length - 2];
   return (
     <svg width={w} height={h} style={{ display: "block", overflow: "visible" }}>
-      <polyline points={pts} fill="none" stroke={up ? C.lime : C.red} strokeWidth={1.5} strokeLinejoin="round" />
+      <polyline points={pts} fill="none" stroke={up ? C.accent : C.red} strokeWidth={1.5} strokeLinejoin="round" />
     </svg>
   );
 }
 
 function EloBar({ elo }) {
   const pct = Math.min(100, Math.max(0, ((elo - 800) / 600) * 100));
-  const col = elo >= 1100 ? C.lime : elo >= 1000 ? C.blue : C.red;
+  const col = elo >= 1100 ? C.accent : elo >= 1000 ? C.blue : C.red;
   return (
     <div style={{ width: "100%", height: 3, background: "#1a1a2e", borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
       <div style={{ width: `${pct}%`, height: "100%", background: col, borderRadius: 2 }} />
@@ -106,7 +107,7 @@ function ErrorBanner({ msg, onRetry }) {
   return (
     <div style={{ ...S.card, borderColor: "#4a1a1a", background: "#1a0808", color: C.red, fontSize: 13 }}>
       ✗ {msg}
-      {onRetry && <button onClick={onRetry} style={{ marginLeft: 12, background: "none", border: "none", color: C.lime, cursor: "pointer", fontFamily: FONT, fontSize: 13 }}>Retry</button>}
+      {onRetry && <button onClick={onRetry} style={{ marginLeft: 12, background: "none", border: "none", color: C.accent, cursor: "pointer", fontFamily: FONT, fontSize: 13 }}>Retry</button>}
     </div>
   );
 }
@@ -134,7 +135,7 @@ function Leaderboard({ players, loading, error, onRetry }) {
               </div>
               <Sparkline history={p.history} />
               <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: p.elo >= 1100 ? C.lime : p.elo >= 1000 ? C.text : C.orange }}>{p.elo.toFixed(0)}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: p.elo >= 1100 ? C.accent : p.elo >= 1000 ? C.text : C.orange }}>{p.elo.toFixed(0)}</div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                   <span style={{ color: C.green }}>{p.wins}W</span> · <span style={{ color: C.red }}>{p.losses}L</span>
                 </div>
@@ -235,7 +236,7 @@ function LogMatch({ players, onLogged }) {
                     <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{name}</div>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 11, color: C.muted }}>{pre.toFixed(0)} →</span>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: C.lime }}>{post.toFixed(1)}</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: C.accent }}>{post.toFixed(1)}</span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: d >= 0 ? C.green : C.red }}>{d >= 0 ? "+" : ""}{d.toFixed(1)}</span>
                     </div>
                     <div style={{ fontSize: 11, color: "#444", marginTop: 5 }}>{(exp * 100).toFixed(0)}% win prob</div>
@@ -243,7 +244,7 @@ function LogMatch({ players, onLogged }) {
                 );
               })}
             </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: "#888" }}>Winner: <span style={{ color: C.lime, fontWeight: 700 }}>{preview.p1wins ? p1 : p2}</span></div>
+            <div style={{ marginTop: 10, fontSize: 12, color: "#888" }}>Winner: <span style={{ color: C.accent, fontWeight: 700 }}>{preview.p1wins ? p1 : p2}</span></div>
           </div>
         )}
 
@@ -252,6 +253,64 @@ function LogMatch({ players, onLogged }) {
             {submitting ? "Logging…" : "Log Match"}
           </button>
           <button style={S.btnGhost} onClick={() => { setP1(""); setP2(""); setS1(""); setS2(""); setApiError(""); }}>Clear</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// ADD PLAYER
+// ════════════════════════════════════════════════════════════════════════════════
+function AddPlayer({ onAdded }) {
+  const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState("");
+  const [apiError, setApiError] = useState("");
+
+  async function submit() {
+    const trimmed = name.trim();
+    if (!trimmed || submitting) return;
+    setSubmitting(true); setApiError("");
+    try {
+      await apiFetch("/players", {
+        method: "POST",
+        body: JSON.stringify({ name: trimmed }),
+      });
+      setToast(`Added ${trimmed}`);
+      setName("");
+      setTimeout(() => setToast(""), 3000);
+      onAdded();
+    } catch (e) {
+      setApiError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <div style={S.sectionHead}>Add Player</div>
+      {toast && <div style={{ ...S.card, borderColor: "#1a3a4a", background: "#081014", color: C.accent, fontSize: 13 }}>{toast}</div>}
+      {apiError && <ErrorBanner msg={apiError} />}
+      <div style={S.card}>
+        <label style={S.label}>Player Name</label>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            style={S.input}
+            type="text"
+            value={name}
+            onChange={e => { setName(e.target.value); setApiError(""); }}
+            placeholder="Enter name…"
+            onKeyDown={e => e.key === "Enter" && submit()}
+          />
+          <button
+            style={{ ...S.btn, opacity: name.trim() && !submitting ? 1 : 0.3, cursor: name.trim() && !submitting ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}
+            onClick={submit}
+            disabled={!name.trim() || submitting}
+          >
+            {submitting ? "Adding…" : "Add"}
+          </button>
         </div>
       </div>
     </>
@@ -281,7 +340,7 @@ function PlayerStats({ players, matches }) {
       {p && (
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-            <StatTile label="ELO"    val={p.elo.toFixed(1)}  color={C.lime} />
+            <StatTile label="ELO"    val={p.elo.toFixed(1)}  color={C.text} />
             <StatTile label="Peak"   val={p.peak.toFixed(0)} color={C.green} />
             <StatTile label="Low"    val={p.low.toFixed(0)}  color={C.orange} />
             <StatTile label="Played" val={p.matches} />
@@ -298,7 +357,7 @@ function PlayerStats({ players, matches }) {
                 const mn = Math.min(...p.history), mx = Math.max(...p.history);
                 const h = Math.max(4, ((v - mn) / (mx - mn || 1)) * 44 + 4);
                 const up = i === 0 || v >= p.history[i - 1];
-                return <div key={i} style={{ flex: 1, height: h, background: up ? C.lime : C.red, borderRadius: "2px 2px 0 0", opacity: 0.82, minWidth: 4, maxWidth: 32 }} />;
+                return <div key={i} style={{ flex: 1, height: h, background: up ? C.accent : C.red, borderRadius: "2px 2px 0 0", opacity: 0.82, minWidth: 4, maxWidth: 32 }} />;
               })}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "#333" }}>
@@ -373,13 +432,13 @@ function HeadToHead({ players, matches }) {
               {[[pA, h2h.winsA, h2h.winsA >= h2h.winsB], [pB, h2h.winsB, h2h.winsB > h2h.winsA]].map(([name, wins, leading], idx) => (
                 <div key={name} style={{ flex: 1, textAlign: idx === 0 ? "left" : "right" }}>
                   <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>{name}</div>
-                  <div style={{ fontSize: 52, fontWeight: 700, lineHeight: 1, color: leading ? C.lime : C.text }}>{wins}</div>
+                  <div style={{ fontSize: 52, fontWeight: 700, lineHeight: 1, color: leading ? C.accent : C.text }}>{wins}</div>
                 </div>
               ))}
               <div style={{ color: "#333", fontSize: 16, fontWeight: 700, padding: "0 12px" }}>vs</div>
             </div>
             <div style={{ display: "flex", height: 4, borderRadius: 3, overflow: "hidden", marginTop: 16, gap: 1 }}>
-              <div style={{ flex: h2h.winsA || 0.5, background: C.lime }} />
+              <div style={{ flex: h2h.winsA || 0.5, background: C.accent }} />
               <div style={{ flex: h2h.winsB || 0.5, background: C.borderHi }} />
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 11, color: C.muted }}>
@@ -423,6 +482,7 @@ function HeadToHead({ players, matches }) {
 const TABS = [
   { id: "leaderboard", icon: "⬡", label: "Board" },
   { id: "log",         icon: "+",  label: "Log"   },
+  { id: "players",     icon: "●",  label: "Players" },
   { id: "stats",       icon: "◎",  label: "Stats" },
   { id: "h2h",         icon: "⇄",  label: "H2H"   },
 ];
@@ -454,6 +514,7 @@ export default function App() {
   const content = () => {
     if (tab === "leaderboard") return <Leaderboard players={players} loading={loading} error={error} onRetry={fetchAll} />;
     if (tab === "log")         return <LogMatch players={players} onLogged={fetchAll} />;
+    if (tab === "players")     return <AddPlayer onAdded={fetchAll} />;
     if (tab === "stats")       return <PlayerStats players={players} matches={matches} />;
     if (tab === "h2h")         return <HeadToHead players={players} matches={matches} />;
   };
@@ -463,7 +524,7 @@ export default function App() {
 
       {/* Header */}
       <div style={{ background: "#0d0d18", borderBottom: `1px solid ${C.border}`, padding: isMobile ? "13px 16px" : "13px 24px", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
-        <div style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: C.lime, letterSpacing: "-0.5px" }}>◈ SQUASH ELO</div>
+        <div style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: C.text, letterSpacing: "-0.5px" }}>SQUASH ELO</div>
         {/* Export button */}
         <a href={`${API}/api/export`} style={{ marginLeft: isMobile ? "auto" : 16, fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
           ↓ xlsx
@@ -471,7 +532,7 @@ export default function App() {
         {!isMobile && (
           <nav style={{ display: "flex", gap: 4, marginLeft: 16 }}>
             {TABS.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "7px 16px", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", border: tab === t.id ? `1px solid ${C.lime}` : `1px solid ${C.borderHi}`, background: tab === t.id ? C.lime : "transparent", color: tab === t.id ? "#0a0a0f" : "#888", cursor: "pointer", borderRadius: 6, fontFamily: FONT, fontWeight: tab === t.id ? 700 : 400 }}>
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "7px 16px", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", border: tab === t.id ? `1px solid ${C.accent}` : `1px solid ${C.borderHi}`, background: tab === t.id ? C.accent : "transparent", color: tab === t.id ? "#0a0a0f" : "#888", cursor: "pointer", borderRadius: 6, fontFamily: FONT, fontWeight: tab === t.id ? 700 : 400 }}>
                 {t.label}
               </button>
             ))}
@@ -490,10 +551,10 @@ export default function App() {
           {TABS.map(t => {
             const active = tab === t.id;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "10px 0 8px", border: "none", background: "transparent", color: active ? C.lime : "#444", cursor: "pointer", fontFamily: FONT, touchAction: "manipulation" }}>
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "10px 0 8px", border: "none", background: "transparent", color: active ? C.accent : "#444", cursor: "pointer", fontFamily: FONT, touchAction: "manipulation" }}>
                 <span style={{ fontSize: 19, lineHeight: 1 }}>{t.icon}</span>
                 <span style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: active ? 700 : 400 }}>{t.label}</span>
-                {active && <div style={{ width: 18, height: 2, background: C.lime, borderRadius: 1 }} />}
+                {active && <div style={{ width: 18, height: 2, background: C.accent, borderRadius: 1 }} />}
               </button>
             );
           })}

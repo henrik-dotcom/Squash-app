@@ -669,6 +669,299 @@ function MatchHistory({ matches, onDeleted, isAdmin, adminToken }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
+// MENTAL EDGE
+// ════════════════════════════════════════════════════════════════════════════════
+function MentalEdge({ players, matches }) {
+  const [sel, setSel] = useState("");
+  const names = players.map(p => p.name).sort();
+  const initials = name => name.trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+
+  const AVATAR_COLORS = [
+    ["#1e3a5f", "#88aaff"], ["#1e3a2e", "#44cc88"], ["#3a1e2e", "#ff88aa"],
+    ["#2e1e3a", "#aa88ff"], ["#3a2e1e", "#ffaa44"],
+  ];
+  const avatarColor = name => {
+    const idx = names.indexOf(name) % AVATAR_COLORS.length;
+    return AVATAR_COLORS[Math.max(0, idx)];
+  };
+
+  // ── Bar helpers ──
+  const barColor = wr => wr === null ? C.muted : wr >= 0.65 ? "#1D9E75" : wr >= 0.45 ? "#EF9F27" : "#C94040";
+  const tagStyle = wr => {
+    if (wr === null) return { background: C.surfaceHi, color: C.muted };
+    if (wr >= 0.65) return { background: "#EAF3DE", color: "#27500A" };
+    if (wr >= 0.45) return { background: "#FAEEDA", color: "#633806" };
+    return { background: "#FCEBEB", color: "#791F1F" };
+  };
+
+  const PILL_STYLES = {
+    "Clutch Player":        { background: "#E6F1FB", color: "#0C447C" },
+    "Underdog Specialist":  { background: "#FAEEDA", color: "#633806" },
+    "Bouncer":              { background: "#EAF3DE", color: "#27500A" },
+    "Streaky":              { background: "#EEEDFE", color: "#3C3489" },
+    "Consistent":           { background: C.surfaceHi, color: C.muted },
+  };
+
+  // ── Per-player stats computation ──
+  const stats = useMemo(() => {
+    if (!sel) return null;
+
+    const won = m => m.winner === sel;
+    const myPre  = m => m.p1 === sel ? m.p1pre : m.p2pre;
+    const oppPre = m => m.p1 === sel ? m.p2pre : m.p1pre;
+    const myMatches = matches.filter(m => m.valid && (m.p1 === sel || m.p2 === sel));
+
+    const isFav      = m => myPre(m) > oppPre(m) + 100;
+    const isUnderdog = m => oppPre(m) > myPre(m) + 100;
+    const isClose    = m => Math.abs(myPre(m) - oppPre(m)) <= 50;
+
+    const winRate = ms => ms.length === 0 ? null : ms.filter(won).length / ms.length;
+
+    const overall      = winRate(myMatches);
+    const favWR        = winRate(myMatches.filter(isFav));
+    const underdogWR   = winRate(myMatches.filter(isUnderdog));
+    const closeWR      = winRate(myMatches.filter(isClose));
+
+    // Pressure win rate = close match win rate (most meaningful "pressure" metric)
+    const pressureWR = closeWR;
+
+    // Bounce-back: for each loss, was the *next* match a win?
+    const bounceBackResults = [];
+    for (let i = 0; i < myMatches.length - 1; i++) {
+      if (!won(myMatches[i])) bounceBackResults.push(myMatches[i + 1]);
+    }
+    const bounceWR = winRate(bounceBackResults);
+
+    // Streak behaviour: win rate when entering match on a 4+ win streak
+    const streakTestResults = [];
+    let curStreak = 0, longestStreak = 0;
+    for (const m of myMatches) {
+      if (curStreak >= 4) streakTestResults.push(m);
+      curStreak = won(m) ? curStreak + 1 : 0;
+      longestStreak = Math.max(longestStreak, curStreak);
+    }
+    const streakWR = winRate(streakTestResults);
+
+    // Opponent breakdown (4+ matches)
+    const oppNames = [...new Set(myMatches.map(m => m.p1 === sel ? m.p2 : m.p1))];
+    const oppData = oppNames.map(opp => {
+      const vs = myMatches.filter(m => (m.p1 === sel ? m.p2 : m.p1) === opp);
+      if (vs.length < 4) return null;
+      const last5 = vs.slice(-5);
+      const recent3 = vs.slice(-3);
+      const r3wins = recent3.filter(won).length;
+      const trend = r3wins >= 2 ? "improving" : (3 - r3wins) >= 2 ? "declining" : "holding steady";
+      return { opp, total: vs.length, wr: winRate(vs), last5, trend };
+    }).filter(Boolean).sort((a, b) => b.total - a.total);
+
+    // Group averages (for comparison callouts)
+    const allNames = players.map(p => p.name);
+    const groupClose = [], groupBounce = [];
+    for (const n of allNames) {
+      const wonN = m => m.winner === n;
+      const ms = matches.filter(m => m.valid && (m.p1 === n || m.p2 === n));
+      const myPreN  = m => m.p1 === n ? m.p1pre : m.p2pre;
+      const oppPreN = m => m.p1 === n ? m.p2pre : m.p1pre;
+      const cWR = winRate(ms.filter(m => Math.abs(myPreN(m) - oppPreN(m)) <= 50));
+      if (cWR !== null) groupClose.push(cWR);
+      const bbR = [];
+      for (let i = 0; i < ms.length - 1; i++) {
+        if (!wonN(ms[i])) bbR.push(ms[i + 1]);
+      }
+      const bWR = winRate(bbR);
+      if (bWR !== null) groupBounce.push(bWR);
+    }
+    const groupCloseWR  = groupClose.length  ? groupClose.reduce((a, b) => a + b) / groupClose.length   : null;
+    const groupBounceWR = groupBounce.length ? groupBounce.reduce((a, b) => a + b) / groupBounce.length : null;
+
+    // Identity label
+    let label = "Consistent";
+    if (closeWR !== null && closeWR > 0.55 && (groupCloseWR === null || closeWR > groupCloseWR + 0.05)) label = "Clutch Player";
+    else if (underdogWR !== null && underdogWR > 0.4) label = "Underdog Specialist";
+    else if (bounceWR !== null && bounceWR > 0.65 && (groupBounceWR === null || bounceWR > groupBounceWR + 0.1)) label = "Bouncer";
+    else if (longestStreak >= 4) label = "Streaky";
+
+    return { myMatches, overall, favWR, underdogWR, closeWR, pressureWR, bounceWR,
+             bounceBackResults, streakWR, streakTestResults, longestStreak,
+             oppData, groupCloseWR, groupBounceWR, label };
+  }, [sel, players, matches]);
+
+  // ── Sub-components ──
+  function StatRow({ label: rowLabel, matches: ms, wr, groupWR, note }) {
+    if (ms !== undefined && ms.length === 0) return null; // hide empty buckets
+    const pct = wr === null ? null : Math.round(wr * 100);
+    const ts = tagStyle(wr);
+    return (
+      <div style={{ ...S.card, marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: wr !== null ? 8 : 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{rowLabel}</div>
+          <div style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20, ...ts }}>
+            {pct !== null ? `${pct}% win rate` : "—"}
+          </div>
+        </div>
+        {wr !== null && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 11, color: C.muted, width: 64, flexShrink: 0 }}>{ms !== undefined ? `${ms.length} match${ms.length !== 1 ? "es" : ""}` : ""}</div>
+              <div style={{ flex: 1, height: 6, background: C.border, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${pct}%`, height: "100%", background: barColor(wr), borderRadius: 3, transition: "width 0.6s ease" }} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 32, textAlign: "right", color: barColor(wr) }}>{pct}%</div>
+            </div>
+            {note && <div style={{ fontSize: 11, color: C.muted, marginTop: 7 }}>{note}</div>}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  const divider = <div style={{ borderTop: `1px solid ${C.border}`, margin: "14px 0" }} />;
+
+  return (
+    <>
+      <div style={S.sectionHead}>Mental Edge</div>
+
+      {/* Player selector */}
+      <div style={S.card}>
+        <label style={S.label}>Select Player</label>
+        <select style={S.select} value={sel} onChange={e => setSel(e.target.value)}>
+          <option value="">— choose —</option>
+          {names.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </div>
+
+      {sel && !stats && <Spinner />}
+
+      {stats && (() => {
+        const { myMatches, overall, favWR, underdogWR, closeWR, pressureWR, bounceWR,
+                bounceBackResults, streakWR, streakTestResults, longestStreak,
+                oppData, groupCloseWR, groupBounceWR, label } = stats;
+        const [avBg, avText] = avatarColor(sel);
+        const pctOverall   = overall   !== null ? Math.round(overall * 100)   : null;
+        const pctPressure  = pressureWR !== null ? Math.round(pressureWR * 100) : null;
+        const pctBounce    = bounceWR  !== null ? Math.round(bounceWR * 100)  : null;
+
+        // Close match comparison note
+        const closeNote = (() => {
+          if (closeWR === null || groupCloseWR === null) return null;
+          const diff = Math.round((closeWR - groupCloseWR) * 100);
+          if (diff > 0) return `You thrive in tight matches — ${diff}% above group average`;
+          if (diff < 0) return `Close matches are your weakness — ${Math.abs(diff)}% below group average`;
+          return null;
+        })();
+
+        const bounceNote = (() => {
+          if (bounceWR === null || groupBounceWR === null) return null;
+          const groupPct = Math.round(groupBounceWR * 100);
+          const diff = Math.round((bounceWR - groupBounceWR) * 100);
+          const sign = diff >= 0 ? "+" : "";
+          return `Group avg: ${groupPct}% · You're ${sign}${diff}pts vs average`;
+        })();
+
+        const streakNote = streakWR !== null
+          ? (streakWR < 0.5 ? "Win rate drops after 4+ game streaks — watch the complacency dip" : "You stay sharp even on long win streaks")
+          : null;
+
+        return (
+          <>
+            {/* Player header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+              <div style={{ width: 44, height: 44, borderRadius: "50%", background: avBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: avText, flexShrink: 0 }}>
+                {initials(sel)}
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 16, fontWeight: 700 }}>{sel}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, ...PILL_STYLES[label] }}>{label}</span>
+                </div>
+                <div style={{ fontSize: 12, color: C.tertiary, marginTop: 2 }}>Based on {myMatches.length} match{myMatches.length !== 1 ? "es" : ""} · all time</div>
+              </div>
+            </div>
+
+            {/* Overview tiles */}
+            <div style={S.label}>Overview</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 20 }}>
+              {[
+                { label: "Overall win rate", val: pctOverall !== null ? `${pctOverall}%` : "—", sub: `${myMatches.filter(m => m.winner === sel).length}W · ${myMatches.filter(m => m.winner !== sel).length}L` },
+                { label: "Pressure win rate", val: pctPressure !== null ? `${pctPressure}%` : "—", sub: "vs. close rivals", color: pctPressure !== null ? barColor(pressureWR) : C.muted },
+                { label: "Bounce-back rate",  val: pctBounce  !== null ? `${pctBounce}%` : "—",  sub: "win after a loss", color: pctBounce !== null ? barColor(bounceWR) : C.muted },
+              ].map(({ label: tl, val, sub, color }) => (
+                <div key={tl} style={{ background: C.surfaceHi, borderRadius: 8, padding: "12px 10px" }}>
+                  <div style={{ fontSize: 10, color: C.muted, marginBottom: 4, lineHeight: 1.3 }}>{tl}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: color || C.text, lineHeight: 1 }}>{val}</div>
+                  <div style={{ fontSize: 10, color: C.tertiary, marginTop: 3 }}>{sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pressure performance */}
+            <div style={S.sectionHead}>Pressure Performance</div>
+            <StatRow label="As favourite (100+ ELO gap)" ms={stats.myMatches.filter(m => m.p1 === sel ? m.p1pre > m.p2pre + 100 : m.p2pre > m.p1pre + 100)} wr={favWR} />
+            <StatRow label="As underdog (100+ ELO gap)"  ms={stats.myMatches.filter(m => m.p1 === sel ? m.p2pre > m.p1pre + 100 : m.p1pre > m.p2pre + 100)} wr={underdogWR} />
+            <StatRow label="Close matches (within 50 ELO)" ms={stats.myMatches.filter(m => Math.abs(m.p1pre - m.p2pre) <= 50)} wr={closeWR} note={closeNote} />
+
+            {divider}
+
+            {/* Streak behaviour */}
+            <div style={S.sectionHead}>Streak Behaviour</div>
+            <StatRow label="After a loss"                ms={bounceBackResults}  wr={bounceWR}  note={bounceNote} />
+            <StatRow label="During a win streak (4+)"   ms={streakTestResults}  wr={streakWR}  note={streakNote} />
+
+            {divider}
+
+            {/* Opponent breakdown */}
+            {oppData.length > 0 && (
+              <>
+                <div style={S.sectionHead}>Opponent Breakdown</div>
+                <div style={S.card}>
+                  {oppData.map((o, i) => {
+                    const [bg, tx] = avatarColor(o.opp);
+                    const trendIcon = o.trend === "improving" ? "↑" : o.trend === "declining" ? "↓" : "→";
+                    const trendColor = o.trend === "improving" ? C.green : o.trend === "declining" ? C.red : C.muted;
+                    const oPct = Math.round(o.wr * 100);
+                    return (
+                      <div key={o.opp} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i === oppData.length - 1 ? "none" : `1px solid ${C.border}` }}>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: tx, flexShrink: 0 }}>
+                          {initials(o.opp)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700 }}>{o.opp}</div>
+                          <div style={{ fontSize: 11, color: C.tertiary, marginTop: 1 }}>
+                            {o.total} matches · <span style={{ color: trendColor }}>{trendIcon} {o.trend}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                          {o.last5.map((m, j) => {
+                            const w = m.winner === sel;
+                            return (
+                              <div key={j} style={{ width: 16, height: 16, borderRadius: "50%", background: w ? "#EAF3DE" : "#FCEBEB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: w ? "#27500A" : "#791F1F" }}>
+                                {w ? "W" : "L"}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: barColor(o.wr), minWidth: 32, textAlign: "right" }}>{oPct}%</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {myMatches.length < 5 && (
+              <div style={{ fontSize: 12, color: C.tertiary, textAlign: "center", padding: "12px 0" }}>
+                More patterns will emerge with additional matches.
+              </div>
+            )}
+          </>
+        );
+      })()}
+    </>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════════
 // SEASON PAGE
 // ════════════════════════════════════════════════════════════════════════════════
 function SeasonPage() {
@@ -899,6 +1192,7 @@ const TABS = [
   { id: "h2h",     icon: "⇄", label: "H2H"       },
   { id: "history", icon: "≡", label: "Match Log" },
   { id: "season",  icon: "⚑", label: "Season"    },
+  { id: "edge",    icon: "◈", label: "Edge"      },
 ];
 
 export default function App() {
@@ -961,6 +1255,7 @@ export default function App() {
     if (tab === "stats")   return <PlayerStats players={players} matches={matches} />;
     if (tab === "h2h")     return <HeadToHead players={players} matches={matches} />;
     if (tab === "season")  return <SeasonPage />;
+    if (tab === "edge")    return <MentalEdge players={players} matches={matches} />;
   };
 
   return (

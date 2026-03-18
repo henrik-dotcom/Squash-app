@@ -450,74 +450,97 @@ function PlayersPage({ players, loading, error, onRetry, onAdded }) {
 // ════════════════════════════════════════════════════════════════════════════════
 function PlayerStats({ players, matches }) {
   const [sel, setSel] = useState("");
-  const names = players.map(p => p.name).sort();
+  const sorted = [...players].sort((a, b) => b.elo - a.elo);
+  const medals = ["🥇", "🥈", "🥉"];
   const p = sel ? players.find(x => x.name === sel) : null;
   const recent = p ? matches.filter(m => m.valid && (m.p1 === sel || m.p2 === sel)).slice(-5).reverse() : [];
 
+  if (!sel) return (
+    <>
+      <div style={S.sectionHead}>Stats</div>
+      <div style={S.card}>
+        {sorted.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 24 }}>No players yet.</div>}
+        {sorted.map((pl, i) => (
+          <div key={pl.name} onClick={() => setSel(pl.name)}
+            style={{ ...S.row(i === sorted.length - 1), cursor: "pointer" }}>
+            <div style={{ width: 26, textAlign: "center", flexShrink: 0, fontSize: i < 3 ? 18 : 13, color: i >= 3 ? C.muted : undefined, fontWeight: 700 }}>
+              {i < 3 ? medals[i] : i + 1}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{pl.name}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                <span style={{ color: C.green }}>{pl.wins}W</span>
+                {" · "}
+                <span style={{ color: C.red }}>{pl.losses}L</span>
+                {" · "}
+                <span>{pl.matches > 0 ? `${(pl.wins / pl.matches * 100).toFixed(0)}%` : "—"}</span>
+              </div>
+            </div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{pl.elo.toFixed(0)}</div>
+              <div style={{ fontSize: 10, color: C.muted }}>ELO</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+
   return (
     <>
-      <div style={S.sectionHead}>Player Stats</div>
-      <div style={S.card}>
-        <label style={S.label}>Select Player</label>
-        <select style={S.select} value={sel} onChange={e => setSel(e.target.value)}>
-          <option value="">— choose —</option>
-          {names.map(n => <option key={n} value={n}>{n}</option>)}
-        </select>
-      </div>
+      <button onClick={() => setSel("")} style={{ ...S.btnSmall, marginBottom: 14, fontSize: 12, padding: "7px 14px" }}>← Back</button>
 
-      {p && (
-        <>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-            <StatTile label="ELO"    val={p.elo.toFixed(1)}  color={C.text} />
-            <StatTile label="Peak"   val={p.peak.toFixed(0)} color={C.green} />
-            <StatTile label="Low"    val={p.low.toFixed(0)}  color={C.orange} />
-            <StatTile label="Played" val={p.matches} />
-            <StatTile label="Wins"   val={p.wins}   color={C.green} />
-            <StatTile label="Losses" val={p.losses} color={C.red} />
-            <StatTile label="Win %"  val={p.matches > 0 ? `${(p.wins / p.matches * 100).toFixed(0)}%` : "—"} />
-            <StatTile label="K"      val={p.elo >= 2000 ? 10 : p.matches >= 30 ? 20 : 40} color={C.muted} />
+      {p && <>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          <StatTile label="ELO"    val={p.elo.toFixed(1)}  color={C.text} />
+          <StatTile label="Peak"   val={p.peak.toFixed(0)} color={C.green} />
+          <StatTile label="Low"    val={p.low.toFixed(0)}  color={C.orange} />
+          <StatTile label="Played" val={p.matches} />
+          <StatTile label="Wins"   val={p.wins}   color={C.green} />
+          <StatTile label="Losses" val={p.losses} color={C.red} />
+          <StatTile label="Win %"  val={p.matches > 0 ? `${(p.wins / p.matches * 100).toFixed(0)}%` : "—"} />
+          <StatTile label="K"      val={p.elo >= 2000 ? 10 : p.matches >= 30 ? 20 : 40} color={C.muted} />
+        </div>
+
+        <div style={S.card}>
+          <div style={S.label}>ELO History</div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 52 }}>
+            {p.history.map((v, i) => {
+              const mn = Math.min(...p.history), mx = Math.max(...p.history);
+              const h = Math.max(4, ((v - mn) / (mx - mn || 1)) * 44 + 4);
+              const up = i === 0 || v >= p.history[i - 1];
+              return <div key={i} style={{ flex: 1, height: h, background: up ? C.accent : C.red, borderRadius: "2px 2px 0 0", opacity: 0.82, minWidth: 4, maxWidth: 32 }} />;
+            })}
           </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "#333" }}>
+            <span>Start · 1000</span><span>Now · {p.elo.toFixed(0)}</span>
+          </div>
+        </div>
 
+        {recent.length > 0 && (
           <div style={S.card}>
-            <div style={S.label}>ELO History</div>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 52 }}>
-              {p.history.map((v, i) => {
-                const mn = Math.min(...p.history), mx = Math.max(...p.history);
-                const h = Math.max(4, ((v - mn) / (mx - mn || 1)) * 44 + 4);
-                const up = i === 0 || v >= p.history[i - 1];
-                return <div key={i} style={{ flex: 1, height: h, background: up ? C.accent : C.red, borderRadius: "2px 2px 0 0", opacity: 0.82, minWidth: 4, maxWidth: 32 }} />;
-              })}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "#333" }}>
-              <span>Start · 1000</span><span>Now · {p.elo.toFixed(0)}</span>
-            </div>
-          </div>
-
-          {recent.length > 0 && (
-            <div style={S.card}>
-              <div style={S.label}>Recent Matches</div>
-              {recent.map((m, i) => {
-                const isP1 = m.p1 === sel, opp = isP1 ? m.p2 : m.p1, won = m.winner === sel;
-                const myPost = isP1 ? m.p1post : m.p2post, myPre = isP1 ? m.p1pre : m.p2pre;
-                const d = myPost - myPre, score = isP1 ? `${m.s1}–${m.s2}` : `${m.s2}–${m.s1}`;
-                return (
-                  <div key={m.id} style={S.row(i === recent.length - 1)}>
-                    <span style={badge(won ? "green" : "red")}>{won ? "W" : "L"}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>vs {opp}</div>
-                      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{score} · {m.date}</div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: d >= 0 ? C.green : C.red }}>{d >= 0 ? "+" : ""}{d.toFixed(1)}</div>
-                      <div style={{ fontSize: 11, color: C.muted }}>{myPost?.toFixed(0)}</div>
-                    </div>
+            <div style={S.label}>Recent Matches</div>
+            {recent.map((m, i) => {
+              const isP1 = m.p1 === sel, opp = isP1 ? m.p2 : m.p1, won = m.winner === sel;
+              const myPost = isP1 ? m.p1post : m.p2post, myPre = isP1 ? m.p1pre : m.p2pre;
+              const d = myPost - myPre, score = isP1 ? `${m.s1}–${m.s2}` : `${m.s2}–${m.s1}`;
+              return (
+                <div key={m.id} style={S.row(i === recent.length - 1)}>
+                  <span style={badge(won ? "green" : "red")}>{won ? "W" : "L"}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>vs {opp}</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{score} · {m.date}</div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: d >= 0 ? C.green : C.red }}>{d >= 0 ? "+" : ""}{d.toFixed(1)}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>{myPost?.toFixed(0)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </>}
     </>
   );
 }
@@ -817,20 +840,40 @@ function MentalEdge({ players, matches }) {
 
   const divider = <div style={{ borderTop: `1px solid ${C.border}`, margin: "14px 0" }} />;
 
-  return (
+  const sorted = [...players].sort((a, b) => b.elo - a.elo);
+  const medals = ["🥇", "🥈", "🥉"];
+
+  if (!sel) return (
     <>
       <div style={S.sectionHead}>Mental Edge</div>
-
-      {/* Player selector */}
       <div style={S.card}>
-        <label style={S.label}>Select Player</label>
-        <select style={S.select} value={sel} onChange={e => setSel(e.target.value)}>
-          <option value="">— choose —</option>
-          {names.map(n => <option key={n} value={n}>{n}</option>)}
-        </select>
+        {sorted.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 24 }}>No players yet.</div>}
+        {sorted.map((pl, i) => (
+          <div key={pl.name} onClick={() => setSel(pl.name)}
+            style={{ ...S.row(i === sorted.length - 1), cursor: "pointer" }}>
+            <div style={{ width: 26, textAlign: "center", flexShrink: 0, fontSize: i < 3 ? 18 : 13, color: i >= 3 ? C.muted : undefined, fontWeight: 700 }}>
+              {i < 3 ? medals[i] : i + 1}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{pl.name}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                <span style={{ color: C.green }}>{pl.wins}W</span>
+                {" · "}
+                <span style={{ color: C.red }}>{pl.losses}L</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: C.muted }}>View →</div>
+          </div>
+        ))}
       </div>
+    </>
+  );
 
-      {sel && !stats && <Spinner />}
+  return (
+    <>
+      <button onClick={() => setSel("")} style={{ ...S.btnSmall, marginBottom: 14, fontSize: 12, padding: "7px 14px" }}>← Back</button>
+
+      {!stats && <Spinner />}
 
       {stats && (() => {
         const { myMatches, overall, favWR, underdogWR, closeWR, pressureWR, bounceWR,

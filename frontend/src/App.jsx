@@ -481,13 +481,13 @@ function HeadToHead({ players, matches }) {
 // ════════════════════════════════════════════════════════════════════════════════
 // MATCH HISTORY
 // ════════════════════════════════════════════════════════════════════════════════
-function MatchHistory({ matches, onDeleted }) {
+function MatchHistory({ matches, onDeleted, isAdmin, adminToken }) {
   const [deleting, setDeleting] = useState(null);
 
   async function del(id) {
     setDeleting(id);
     try {
-      await apiFetch(`/matches/${id}`, { method: "DELETE" });
+      await apiFetch(`/matches/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${adminToken}` } });
       onDeleted();
     } catch (e) {
       alert(e.message);
@@ -521,13 +521,15 @@ function MatchHistory({ matches, onDeleted }) {
                   </div>
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{m.date}</div>
                 </div>
-                <button
-                  onClick={() => del(m.id)}
-                  disabled={deleting === m.id}
-                  style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 6, color: C.muted, cursor: "pointer", fontSize: 12, padding: "5px 10px", fontFamily: FONT, flexShrink: 0, opacity: deleting === m.id ? 0.4 : 1 }}
-                >
-                  {deleting === m.id ? "…" : "✕"}
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => del(m.id)}
+                    disabled={deleting === m.id}
+                    style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 6, color: C.muted, cursor: "pointer", fontSize: 12, padding: "5px 10px", fontFamily: FONT, flexShrink: 0, opacity: deleting === m.id ? 0.4 : 1 }}
+                  >
+                    {deleting === m.id ? "…" : "✕"}
+                  </button>
+                )}
               </div>
             );
           })}
@@ -554,6 +556,35 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState("");
 
+  // ─── Admin auth ───────────────────────────────────────────────────────────
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem("adminToken") || "");
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginPw, setLoginPw] = useState("");
+  const [loginErr, setLoginErr] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const isAdmin = !!adminToken;
+
+  async function handleLogin() {
+    setLoginLoading(true); setLoginErr("");
+    try {
+      const res = await apiFetch("/admin/login", { method: "POST", body: JSON.stringify({ password: loginPw }) });
+      localStorage.setItem("adminToken", res.token);
+      setAdminToken(res.token);
+      setShowLogin(false);
+      setLoginPw("");
+    } catch (e) {
+      setLoginErr("Wrong password");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("adminToken");
+    setAdminToken("");
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   const fetchAll = useCallback(async () => {
     setLoading(true); setError("");
     try {
@@ -572,13 +603,39 @@ export default function App() {
   const content = () => {
     if (tab === "log")     return <LogMatch players={players} onLogged={fetchAll} />;
     if (tab === "players") return <PlayersPage players={players} loading={loading} error={error} onRetry={fetchAll} onAdded={fetchAll} />;
-    if (tab === "history")     return <MatchHistory matches={matches} onDeleted={fetchAll} />;
-    if (tab === "stats")       return <PlayerStats players={players} matches={matches} />;
-    if (tab === "h2h")         return <HeadToHead players={players} matches={matches} />;
+    if (tab === "history") return <MatchHistory matches={matches} onDeleted={fetchAll} isAdmin={isAdmin} adminToken={adminToken} />;
+    if (tab === "stats")   return <PlayerStats players={players} matches={matches} />;
+    if (tab === "h2h")     return <HeadToHead players={players} matches={matches} />;
   };
 
   return (
     <div style={{ fontFamily: FONT, background: C.bg, minHeight: "100vh", color: C.text, paddingBottom: isMobile ? 72 : 0 }}>
+
+      {/* Admin login modal */}
+      {showLogin && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={e => { if (e.target === e.currentTarget) setShowLogin(false); }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.borderHi}`, borderRadius: 12, padding: 28, width: 320, fontFamily: FONT }}>
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16 }}>Admin Login</div>
+            <input
+              autoFocus
+              type="password"
+              placeholder="Password"
+              value={loginPw}
+              onChange={e => { setLoginPw(e.target.value); setLoginErr(""); }}
+              onKeyDown={e => e.key === "Enter" && handleLogin()}
+              style={{ ...S.input, marginBottom: 10 }}
+            />
+            {loginErr && <div style={{ color: C.red, fontSize: 12, marginBottom: 10 }}>{loginErr}</div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={handleLogin} disabled={loginLoading} style={{ ...S.btn, flex: 1, opacity: loginLoading ? 0.5 : 1 }}>
+                {loginLoading ? "…" : "Login"}
+              </button>
+              <button onClick={() => setShowLogin(false)} style={{ ...S.btnGhost, padding: "14px 16px" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ background: "#28284a", borderBottom: `1px solid ${C.border}`, padding: isMobile ? "13px 16px" : "13px 24px", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 10 }}>
@@ -592,10 +649,15 @@ export default function App() {
             ))}
           </nav>
         )}
-        {/* Export button — always top right */}
-        <a href={`${API}/api/export`} style={{ marginLeft: "auto", fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
-          ↓ xlsx
-        </a>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <a href={`${API}/api/export`} style={{ fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
+            ↓ xlsx
+          </a>
+          {isAdmin
+            ? <button onClick={handleLogout} title="Logout" style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 5, color: C.accent, cursor: "pointer", fontSize: 14, padding: "4px 9px", fontFamily: FONT }}>🔓</button>
+            : <button onClick={() => setShowLogin(true)} title="Admin login" style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 5, color: C.muted, cursor: "pointer", fontSize: 14, padding: "4px 9px", fontFamily: FONT }}>🔒</button>
+          }
+        </div>
       </div>
 
       {/* Content */}

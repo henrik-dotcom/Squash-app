@@ -1,11 +1,12 @@
 import sqlite3
 import os
 import pathlib
+import secrets
 from datetime import date
 from contextlib import contextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +23,19 @@ app.add_middleware(
 )
 
 DB_PATH = os.environ.get("DB_PATH", "squash.db")
+
+# ─── Admin auth ───────────────────────────────────────────────────────────────
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+_admin_tokens: set[str] = set()
+
+class AdminLogin(BaseModel):
+    password: str
+
+def require_admin(authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Admin required")
+    if authorization[7:] not in _admin_tokens:
+        raise HTTPException(401, "Invalid or expired token")
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 @contextmanager
@@ -216,6 +230,15 @@ def log_match(body: NewMatch):
     return new_match
 
 
+@app.post("/api/admin/login")
+def admin_login(body: AdminLogin):
+    if not ADMIN_PASSWORD or body.password != ADMIN_PASSWORD:
+        raise HTTPException(401, "Invalid password")
+    token = secrets.token_hex(32)
+    _admin_tokens.add(token)
+    return {"token": token}
+
+
 @app.post("/api/reset", status_code=200)
 def reset_db():
     with get_db() as db:
@@ -226,7 +249,8 @@ def reset_db():
 
 
 @app.delete("/api/matches/{match_id}", status_code=200)
-def delete_match(match_id: int):
+def delete_match(match_id: int, authorization: Optional[str] = Header(None)):
+    require_admin(authorization)
     with get_db() as db:
         if not db.execute("SELECT id FROM matches WHERE id=?", (match_id,)).fetchone():
             raise HTTPException(404, "Match not found")

@@ -1341,10 +1341,7 @@ export default function App() {
           </nav>
         )}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          <a href={`${API}/api/export`} style={{ fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
-            ↓ xlsx
-          </a>
-          {isAdmin
+{isAdmin
             ? <button onClick={handleLogout} title="Logout" style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 5, color: C.accent, cursor: "pointer", fontSize: 14, padding: "4px 9px", fontFamily: FONT }}>🔓</button>
             : <button onClick={() => setShowLogin(true)} title="Admin login" style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 5, color: C.muted, cursor: "pointer", fontSize: 14, padding: "4px 9px", fontFamily: FONT }}>🔒</button>
           }

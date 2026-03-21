@@ -454,62 +454,6 @@ def get_stats():
     }
 
 
-@app.get("/api/export")
-def export_excel():
-    try:
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment
-    except ImportError:
-        raise HTTPException(500, "openpyxl not installed")
-
-    with get_db() as db:
-        match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
-        names      = [r["name"] for r in db.execute("SELECT name FROM players ORDER BY name").fetchall()]
-
-    computed, stats = compute_state(match_rows, names)
-
-    wb   = openpyxl.Workbook()
-    hfill = PatternFill("solid", fgColor="1B3A6B")
-    hfont = Font(bold=True, color="FFFFFF", name="Calibri")
-
-    def style_header(ws, headers):
-        for i, h in enumerate(headers, 1):
-            c = ws.cell(row=1, column=i, value=h)
-            c.fill = hfill
-            c.font = hfont
-            c.alignment = Alignment(horizontal="center")
-
-    # Leaderboard sheet
-    ws = wb.active
-    ws.title = "Leaderboard"
-    style_header(ws, ["Rank","Player","ELO","Matches","Wins","Losses","Win %","Peak ELO","Low ELO"])
-    for rank, p in enumerate(sorted(stats.values(), key=lambda x: -x["elo"]), 1):
-        ws.append([rank, p["name"], p["elo"], p["matches"], p["wins"], p["losses"],
-                   round(p["wins"] / p["matches"], 3) if p["matches"] else 0,
-                   p["peak"], p["low"]])
-
-    # Match Log sheet
-    ws2 = wb.create_sheet("Match Log")
-    style_header(ws2, ["ID","Date","Player 1","Player 2","P1 Score","P2 Score",
-                        "Valid","Winner","P1 Pre-ELO","P2 Pre-ELO","P1 Post-ELO","P2 Post-ELO"])
-    for m in computed:
-        ws2.append([m["id"], m["date"], m["p1"], m["p2"], m["s1"], m["s2"],
-                    "VALID" if m["valid"] else "INVALID", m["winner"] or "",
-                    m["p1pre"], m["p2pre"],
-                    m["p1post"] if m["p1post"] is not None else "",
-                    m["p2post"] if m["p2post"] is not None else ""])
-
-    import io
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=squash_elo.xlsx"}
-    )
-
 
 @app.get("/api/seasons")
 def get_seasons():

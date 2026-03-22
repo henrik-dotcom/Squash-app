@@ -327,16 +327,26 @@ function LogMatch({ players, matches, onLogged }) {
 
       {step === "select" && (
         <div style={S.card}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[{ lbl: "Player 1", val: p1, set: setP1, excl: p2 }, { lbl: "Player 2", val: p2, set: setP2, excl: p1 }].map(({ lbl, val, set, excl }) => (
-              <div key={lbl}>
-                <label style={S.label}>{lbl}</label>
-                <select style={S.select} value={val} onChange={e => set(e.target.value)}>
-                  <option value="">Select…</option>
-                  {names.filter(n => n !== excl).map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </div>
-            ))}
+          <div style={{ marginBottom: 2 }}>
+            <label style={S.label}>Who played?</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+              {(() => {
+                const pairs = [];
+                for (let i = 0; i < names.length; i++)
+                  for (let j = i + 1; j < names.length; j++)
+                    pairs.push([names[i], names[j]]);
+                return pairs.map(([a, b]) => {
+                  const selected = (p1 === a && p2 === b) || (p1 === b && p2 === a);
+                  return (
+                    <button key={`${a}-${b}`}
+                      style={{ ...S.btn, flex: 1, minWidth: 100, background: selected ? C.accent : C.surface, opacity: selected ? 1 : 0.6, border: `1px solid ${selected ? C.accent : C.border}` }}
+                      onClick={() => { setP1(a); setP2(b); }}>
+                      {a} vs {b}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
           </div>
           {players.length < 2 && <div style={{ marginTop: 12, fontSize: 12, color: C.muted }}>Add at least 2 players on the Board tab first.</div>}
         </div>

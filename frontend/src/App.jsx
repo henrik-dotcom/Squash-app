@@ -189,7 +189,7 @@ function MatchPreview({ p1, p2, playerMap, matches, onBack, onLogged }) {
             <div style={{ width: 52, height: 52, borderRadius: "50%", background: av, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, color: avText }}>
               {initials(name)}
             </div>
-            <div style={{ fontWeight: 700, fontSize: 14, textAlign: "center" }}>{name}</div>
+            <div style={{ fontWeight: 700, fontSize: 14, textAlign: "center", color: C.text }}>{name}</div>
             <div style={{ fontSize: 11, color: C.muted }}>{elo.toFixed(0)} ELO</div>
             {name === underdogName && (
               <div style={{ background: "#FAEEDA", color: "#633806", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, letterSpacing: "0.05em" }}>Underdog</div>
@@ -409,7 +409,7 @@ function PlayersPage({ players, loading, error, onRetry, onAdded }) {
                 {i < 3 ? medals[i] : i + 1}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: C.text }}>{p.name}</div>
                 <EloBar elo={p.elo} />
               </div>
               <Sparkline history={p.history} />
@@ -477,7 +477,7 @@ function PlayerStats({ players, matches }) {
               {i < 3 ? medals[i] : i + 1}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{pl.name}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{pl.name}</div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                 <span style={{ color: C.green }}>{pl.wins}W</span>
                 {" · "}
@@ -487,7 +487,7 @@ function PlayerStats({ players, matches }) {
               </div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{pl.elo.toFixed(0)}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{pl.elo.toFixed(0)}</div>
               <div style={{ fontSize: 10, color: C.muted }}>ELO</div>
             </div>
           </div>
@@ -865,7 +865,7 @@ function MentalEdge({ players, matches }) {
               {i < 3 ? medals[i] : i + 1}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{pl.name}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: C.text }}>{pl.name}</div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                 <span style={{ color: C.green }}>{pl.wins}W</span>
                 {" · "}
@@ -924,7 +924,7 @@ function MentalEdge({ players, matches }) {
               </div>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 16, fontWeight: 700 }}>{sel}</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{sel}</span>
                   <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, ...PILL_STYLES[label] }}>{label}</span>
                 </div>
                 <div style={{ fontSize: 12, color: C.tertiary, marginTop: 2 }}>Based on {myMatches.length} match{myMatches.length !== 1 ? "es" : ""} · all time</div>
@@ -1146,7 +1146,7 @@ function SeasonPage() {
                           {initials(p.name)}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 13 }}>{p.name}</div>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{p.name}</div>
                           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                             <span style={{ color: C.green }}>{p.wins}W</span>
                             {" · "}

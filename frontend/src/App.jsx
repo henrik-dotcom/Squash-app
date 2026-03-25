@@ -327,18 +327,18 @@ function LogMatch({ players, matches, onLogged }) {
 
       {step === "select" && (
         <div style={S.card}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[{ lbl: "Player 1", val: p1, set: setP1, excl: p2 }, { lbl: "Player 2", val: p2, set: setP2, excl: p1 }].map(({ lbl, val, set, excl }) => (
-              <div key={lbl}>
-                <label style={S.label}>{lbl}</label>
-                <select style={S.select} value={val} onChange={e => set(e.target.value)}>
-                  <option value="">Select…</option>
-                  {names.filter(n => n !== excl).map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
+          <div style={S.label}>Who played?</div>
+          {players.length < 2
+            ? <div style={{ fontSize: 12, color: C.muted }}>Add at least 2 players on the Board tab first.</div>
+            : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 }}>
+                {names.flatMap((a, i) => names.slice(i + 1).map(b => (
+                  <div key={`${a}-${b}`} onClick={() => { setP1(a); setP2(b); }}
+                    style={{ background: C.surfaceHi, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 10px", cursor: "pointer", textAlign: "center", color: C.text, fontSize: 13, fontWeight: 600, lineHeight: 1.5, touchAction: "manipulation" }}>
+                    {a}<br /><span style={{ fontSize: 10, color: C.muted, fontWeight: 400 }}>vs</span><br />{b}
+                  </div>
+                )))}
               </div>
-            ))}
-          </div>
-          {players.length < 2 && <div style={{ marginTop: 12, fontSize: 12, color: C.muted }}>Add at least 2 players on the Board tab first.</div>}
+          }
         </div>
       )}
 

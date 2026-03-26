@@ -125,6 +125,7 @@ function MatchPreview({ p1, p2, playerMap, matches, onBack, onLogged }) {
 
   const [s1, setS1] = useState("");
   const [s2, setS2] = useState("");
+  const [matchDate, setMatchDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState("");
   const entered = s1 !== "" && s2 !== "";
@@ -134,7 +135,7 @@ function MatchPreview({ p1, p2, playerMap, matches, onBack, onLogged }) {
     if (!scoreOk || submitting) return;
     setSubmitting(true); setApiError("");
     try {
-      await apiFetch("/matches", { method: "POST", body: JSON.stringify({ p1, p2, s1: parseInt(s1), s2: parseInt(s2) }) });
+      await apiFetch("/matches", { method: "POST", body: JSON.stringify({ p1, p2, s1: parseInt(s1), s2: parseInt(s2), date: matchDate }) });
       onLogged();
     } catch (e) {
       setApiError(e.message);
@@ -284,6 +285,16 @@ function MatchPreview({ p1, p2, playerMap, matches, onBack, onLogged }) {
         ))}
       </div>
       {entered && !scoreOk && <div style={{ fontSize: 12, color: C.red, marginBottom: 10 }}>✗ Win by 2 with ≥11 pts (e.g. 11–7, 12–10)</div>}
+
+      <div style={{ marginBottom: 10 }}>
+        <label style={S.label}>Match Date</label>
+        <input
+          style={{ ...S.input }}
+          type="date"
+          value={matchDate}
+          onChange={e => setMatchDate(e.target.value)}
+        />
+      </div>
       {apiError && <ErrorBanner msg={apiError} />}
 
       <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
@@ -414,7 +425,18 @@ function PlayersPage({ players, loading, error, onRetry, onAdded }) {
               </div>
               <Sparkline history={p.history} />
               <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{p.elo.toFixed(0)}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 5, justifyContent: "flex-end" }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{p.elo.toFixed(0)}</div>
+                  {p.history && p.history.length >= 2 && (() => {
+                    const delta = Math.round(p.history[p.history.length - 1] - p.history[p.history.length - 2]);
+                    if (delta === 0) return null;
+                    return (
+                      <div style={{ fontSize: 11, fontWeight: 700, color: delta > 0 ? C.green : C.red }}>
+                        {delta > 0 ? `+${delta}` : delta}
+                      </div>
+                    );
+                  })()}
+                </div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
                   <span style={{ color: C.green }}>{p.wins}W</span>
                   {" · "}

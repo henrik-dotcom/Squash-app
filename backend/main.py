@@ -395,6 +395,10 @@ def log_match(body: NewMatch):
         raise HTTPException(400, "Invalid score — win by 2 with ≥11 pts (e.g. 11-7, 12-10, 15-13)")
 
     match_date = body.date or str(date.today())
+    try:
+        datetime.strptime(match_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date — use YYYY-MM-DD")
 
     with get_db() as db:
         for pname in [body.p1, body.p2]:
@@ -424,7 +428,8 @@ def admin_login(body: AdminLogin):
 
 
 @app.post("/api/reset", status_code=200)
-def reset_db():
+def reset_db(authorization: Optional[str] = Header(None)):
+    require_admin(authorization)
     with get_db() as db:
         db.execute("DELETE FROM matches")
         db.execute("DELETE FROM players")

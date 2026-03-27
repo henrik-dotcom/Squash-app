@@ -77,6 +77,19 @@ def init_db():
 
             CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_unique
                 ON matches(date, p1, p2, s1, s2, created);
+
+            CREATE TABLE IF NOT EXISTS challenges (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                challenger      TEXT NOT NULL,
+                challenged      TEXT NOT NULL,
+                required_wins   INTEGER NOT NULL DEFAULT 2,
+                issued_date     TEXT NOT NULL,
+                deadline_date   TEXT,
+                status          TEXT NOT NULL DEFAULT 'open',
+                winner          TEXT,
+                resolved_date   TEXT,
+                created         TEXT DEFAULT (datetime('now'))
+            );
         """)
 
         conn.commit()
@@ -350,6 +363,12 @@ class NewMatch(BaseModel):
 class NewPlayer(BaseModel):
     name: str
 
+class ChallengeCreate(BaseModel):
+    challenger: str
+    challenged: str
+    required_wins: int
+    deadline_days: Optional[int] = None
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
 @app.get("/api")
 def root():
@@ -433,7 +452,8 @@ def reset_db(authorization: Optional[str] = Header(None)):
     with get_db() as db:
         db.execute("DELETE FROM matches")
         db.execute("DELETE FROM players")
-        db.execute("DELETE FROM sqlite_sequence WHERE name IN ('matches','players')")
+        db.execute("DELETE FROM challenges")
+        db.execute("DELETE FROM sqlite_sequence WHERE name IN ('matches','players','challenges')")
     return {"status": "reset"}
 
 
@@ -574,6 +594,157 @@ def get_season(season_id: str):
         "standings":     standings,
         "awards":        compute_awards(s),
     }
+
+
+# ─── Challenger Mode ──────────────────────────────────────────────────────────
+@app.post("/api/challenges", status_code=201)
+def create_challenge(body: ChallengeCreate):
+    # Validation 1: non-empty strings (Pydantic delivers them as strings; check strip)
+    if not body.challenger.strip() or not body.challenged.strip():
+        raise HTTPException(422, "challenger and challenged must be non-empty strings")
+    # Validation 2: different players
+    if body.challenger == body.challenged:
+        raise HTTPException(400, "A player cannot challenge themselves")
+    # Validation 3: required_wins
+    if body.required_wins not in (2, 3):
+        raise HTTPException(400, "required_wins must be 2 or 3")
+    # Validation 4: deadline_days
+    if body.deadline_days is not None and body.deadline_days not in (7, 14, 30):
+        raise HTTPException(400, "deadline_days must be 7, 14, 30, or null")
+
+    issued_date = datetime.utcnow().strftime("%Y-%m-%d")
+    deadline_date = (
+        (datetime.utcnow() + timedelta(days=body.deadline_days)).strftime("%Y-%m-%d")
+        if body.deadline_days is not None else None
+    )
+
+    with get_db() as db:
+        # Validation 5: both players must exist (check challenger first)
+        for pname in [body.challenger, body.challenged]:
+            if not db.execute("SELECT id FROM players WHERE name=?", (pname,)).fetchone():
+                raise HTTPException(404, f"Player not found: {pname}")
+        # Validation 6: no existing open challenge between same pair
+        existing = db.execute(
+            """SELECT id FROM challenges
+               WHERE status = 'open'
+               AND ((challenger = ? AND challenged = ?) OR (challenger = ? AND challenged = ?))""",
+            (body.challenger, body.challenged, body.challenged, body.challenger)
+        ).fetchone()
+        if existing:
+            raise HTTPException(400, "An open challenge already exists between these players")
+
+        cur = db.execute(
+            """INSERT INTO challenges (challenger, challenged, required_wins, issued_date, deadline_date)
+               VALUES (?, ?, ?, ?, ?)""",
+            (body.challenger, body.challenged, body.required_wins, issued_date, deadline_date)
+        )
+        new_id = cur.lastrowid
+        row = db.execute("SELECT * FROM challenges WHERE id=?", (new_id,)).fetchone()
+
+    return dict(row)
+
+
+@app.get("/api/challenges")
+def get_challenges():
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT * FROM challenges ORDER BY created DESC"
+        ).fetchall()
+
+        result = []
+        for row in rows:
+            ch = dict(row)
+            challenger    = ch["challenger"]
+            challenged    = ch["challenged"]
+            issued_date   = ch["issued_date"]
+            required_wins = ch["required_wins"]
+            stored_status = ch["status"]
+            deadline_date = ch["deadline_date"]
+
+            # Step 1 — fetch relevant matches since issued_date
+            match_rows = db.execute(
+                """SELECT p1, p2, s1, s2, date FROM matches
+                   WHERE ((p1 = ? AND p2 = ?) OR (p1 = ? AND p2 = ?))
+                   AND date >= ?
+                   ORDER BY date ASC, id ASC""",
+                (challenger, challenged, challenged, challenger, issued_date)
+            ).fetchall()
+
+            # Step 2 — walk matches, stop when series decided
+            challenger_wins = 0
+            challenged_wins = 0
+            computed_winner = None
+            computed_resolved_date = None
+
+            for m in match_rows:
+                p1, p2, s1, s2 = m["p1"], m["p2"], m["s1"], m["s2"]
+                match_winner = p1 if s1 > s2 else p2
+                if match_winner == challenger:
+                    challenger_wins += 1
+                else:
+                    challenged_wins += 1
+
+                if challenger_wins >= required_wins:
+                    computed_winner = challenger
+                    computed_resolved_date = m["date"]
+                    break
+                if challenged_wins >= required_wins:
+                    computed_winner = challenged
+                    computed_resolved_date = m["date"]
+                    break
+
+            # Step 3 — compute status
+            if stored_status == "cancelled":
+                computed_status = "cancelled"
+            elif computed_winner:
+                computed_status = "resolved"
+            elif deadline_date and today > deadline_date:
+                computed_status = "expired"
+            else:
+                computed_status = "open"
+
+            # Step 4 — write-back if status changed
+            if (computed_status != stored_status
+                    or computed_winner != ch.get("winner")
+                    or computed_resolved_date != ch.get("resolved_date")):
+                db.execute(
+                    "UPDATE challenges SET status = ?, winner = ?, resolved_date = ? WHERE id = ?",
+                    (computed_status, computed_winner, computed_resolved_date, ch["id"])
+                )
+                ch["status"]        = computed_status
+                ch["winner"]        = computed_winner
+                ch["resolved_date"] = computed_resolved_date
+
+            # Step 5 — days_remaining
+            if deadline_date:
+                deadline_dt = datetime.strptime(deadline_date, "%Y-%m-%d")
+                today_dt    = datetime.strptime(today, "%Y-%m-%d")
+                days_remaining = max(0, (deadline_dt - today_dt).days)
+            else:
+                days_remaining = None
+
+            ch["challenger_wins"] = challenger_wins
+            ch["challenged_wins"] = challenged_wins
+            ch["days_remaining"]  = days_remaining
+            result.append(ch)
+
+    return result
+
+
+@app.delete("/api/challenges/{challenge_id}", status_code=200)
+def cancel_challenge(challenge_id: int, authorization: Optional[str] = Header(None)):
+    require_admin(authorization)
+    with get_db() as db:
+        row = db.execute("SELECT * FROM challenges WHERE id=?", (challenge_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Challenge not found")
+        status = row["status"]
+        if status in ("resolved", "cancelled"):
+            raise HTTPException(400, f"Challenge is already {status} and cannot be cancelled")
+        db.execute("UPDATE challenges SET status = 'cancelled' WHERE id = ?", (challenge_id,))
+    return {"message": "Challenge cancelled"}
 
 
 # ─── Serve frontend static files (must come after all API routes) ────────────

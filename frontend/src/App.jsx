@@ -389,7 +389,7 @@ function LogMatch({ players, matches, onLogged, preselect, onClearPreselect }) {
 // ════════════════════════════════════════════════════════════════════════════════
 // PLAYERS PAGE (roster + add player)
 // ════════════════════════════════════════════════════════════════════════════════
-function PlayersPage({ players, loading, error, onRetry, onAdded, lastMatch }) {
+function PlayersPage({ players, loading, error, onRetry, onAdded, lastMatch, identity }) {
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
@@ -434,8 +434,10 @@ function PlayersPage({ players, loading, error, onRetry, onAdded, lastMatch }) {
       {!loading && !error && (
         <div style={S.card}>
           {players.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 24 }}>No players yet — add one below.</div>}
-          {players.map((p, i) => (
-            <div key={p.name} style={S.row(i === players.length - 1)}>
+          {players.map((p, i) => {
+            const isMe = p.name === identity && identity && identity !== "__guest__";
+            return (
+            <div key={p.name} style={{ ...S.row(i === players.length - 1), ...(isMe && { background: "rgba(136,170,255,0.06)", borderLeft: `3px solid ${C.accent}`, paddingLeft: 11, marginLeft: -16, marginRight: -16, paddingRight: 16 }) }}>
               <div style={{ width: 26, textAlign: "center", flexShrink: 0, fontSize: i < 3 ? 18 : 13, color: i >= 3 ? C.muted : undefined, fontWeight: 700 }}>
                 {i < 3 ? medals[i] : i + 1}
               </div>
@@ -466,7 +468,7 @@ function PlayersPage({ players, loading, error, onRetry, onAdded, lastMatch }) {
                 </div>
               </div>
             </div>
-          ))}
+          );})}
         </div>
       )}
 
@@ -1309,7 +1311,87 @@ function SeasonPage() {
 }
 
 
-const TABS = [
+// ════════════════════════════════════════════════════════════════════════════════
+// PLAYER HOME
+// ════════════════════════════════════════════════════════════════════════════════
+function PlayerHome({ player, matches, loading, rank, onLogMatch }) {
+  if (loading || !player) return <Spinner />;
+
+  const myMatches = matches.filter(m => m.valid && (m.p1 === player.name || m.p2 === player.name));
+  const recent = [...myMatches].reverse().slice(0, 5);
+
+  return (
+    <>
+      <div style={S.pageHead}>Home</div>
+
+      {/* Greeting card */}
+      <div style={S.card}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{ width: 44, height: 44, borderRadius: "50%", background: "#1e3a5f", color: C.accent, fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {player.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Hey, {player.name}</div>
+            <div style={{ fontSize: 12, color: C.muted }}>Rank #{rank}</div>
+          </div>
+          <Sparkline history={player.history} w={60} h={28} />
+        </div>
+        <div style={{ fontSize: 28, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+          {player.elo.toFixed(0)}
+          <span style={{ fontSize: 12, color: C.muted, fontWeight: 400, marginLeft: 6 }}>ELO</span>
+        </div>
+        <EloBar elo={player.elo} />
+      </div>
+
+      {/* 2×2 stat grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+        <StatTile label="Wins"   val={player.wins}    color={C.green} />
+        <StatTile label="Losses" val={player.losses}  color={C.red} />
+        <StatTile label="Win %"  val={player.matches > 0 ? `${(player.wins / player.matches * 100).toFixed(0)}%` : "—"} />
+        <StatTile label="Played" val={player.matches} />
+      </div>
+
+      {/* Recent form */}
+      {recent.length > 0 && (
+        <div style={S.card}>
+          <div style={S.sectionHead}>Recent Form</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            {[...Array(5)].map((_, i) => {
+              const m = recent[i];
+              const won = m ? m.winner === player.name : null;
+              return (
+                <div key={i} style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700,
+                  background: won === true ? "#1a3a1a" : won === false ? "#3a1a1a" : C.surfaceHi,
+                  color: won === true ? C.green : won === false ? C.red : C.border,
+                  border: `1px solid ${won === true ? "#2a5a2a" : won === false ? "#5a2a2a" : C.border}` }}>
+                  {m ? (won ? "W" : "L") : ""}
+                </div>
+              );
+            })}
+          </div>
+          {recent.slice(0, 3).map((m, i) => {
+            const opp = m.p1 === player.name ? m.p2 : m.p1;
+            const won = m.winner === player.name;
+            return (
+              <div key={m.id} style={S.row(i === Math.min(2, recent.length - 1))}>
+                <span style={badge(won ? "green" : "red")}>{won ? "W" : "L"}</span>
+                <div style={{ flex: 1, fontSize: 13 }}>vs <span style={{ color: C.accent }}>{opp}</span></div>
+                <div style={{ fontSize: 11, color: C.muted }}>{m.date}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* CTA */}
+      <button onClick={onLogMatch} style={{ ...S.btn, width: "100%", marginTop: 4 }}>
+        + Log a Match
+      </button>
+    </>
+  );
+}
+
+const BASE_TABS = [
   { id: "log",     icon: "+", label: "Match"     },
   { id: "players", icon: "⬡", label: "Board"     },
   { id: "season",  icon: "⚑", label: "Season"    },
@@ -1319,7 +1401,10 @@ const TABS = [
 ];
 
 export default function App() {
-  const [tab, setTab] = useState("log");
+  const [tab, setTab] = useState(() => {
+    const id = localStorage.getItem("squashIdentity");
+    return (id && id !== "__guest__") ? "home" : "log";
+  });
   const isMobile = useIsMobile();
 
   const [players, setPlayers] = useState([]);
@@ -1335,6 +1420,18 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [hoverXlsx, setHoverXlsx] = useState(false);
   const isAdmin = !!adminToken;
+
+  // ─── Player identity (localStorage, no auth) ──────────────────────────────
+  const [identity, setIdentity] = useState(() => localStorage.getItem("squashIdentity"));
+  const [showSwitchSheet, setShowSwitchSheet] = useState(false);
+
+  function chooseIdentity(name) {
+    const val = name || "__guest__";
+    localStorage.setItem("squashIdentity", val);
+    setIdentity(val);
+    setTab(name ? "home" : "log");
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 
   async function handleLogin() {
     setLoginLoading(true); setLoginErr("");
@@ -1387,9 +1484,26 @@ export default function App() {
     return { p1: m.p1, p2: m.p2, days };
   }, [matches]);
 
+  const tabs = useMemo(() =>
+    identity && identity !== "__guest__"
+      ? [{ id: "home", icon: "⌂", label: "Home" }, ...BASE_TABS]
+      : BASE_TABS,
+    [identity]
+  );
+
   const content = () => {
+    if (tab === "home") {
+      const rank = [...players].sort((a, b) => b.elo - a.elo).findIndex(p => p.name === identity) + 1;
+      return <PlayerHome
+        player={players.find(p => p.name === identity)}
+        matches={matches}
+        loading={loading}
+        rank={rank}
+        onLogMatch={() => { setMatchLogPreselect({ challenger: identity, challenged: "" }); setTab("log"); }}
+      />;
+    }
     if (tab === "log")     return <LogMatch players={players} matches={matches} onLogged={fetchAll} preselect={matchLogPreselect} onClearPreselect={() => setMatchLogPreselect(null)} />;
-    if (tab === "players") return <PlayersPage players={players} loading={loading} error={error} onRetry={fetchAll} onAdded={fetchAll} lastMatch={lastMatch} />;
+    if (tab === "players") return <PlayersPage players={players} loading={loading} error={error} onRetry={fetchAll} onAdded={fetchAll} lastMatch={lastMatch} identity={identity} />;
     if (tab === "history") return <MatchHistory matches={matches} onDeleted={fetchAll} isAdmin={isAdmin} adminToken={adminToken} />;
     if (tab === "stats")   return <PlayerStats players={players} matches={matches} />;
     if (tab === "h2h")     return <HeadToHead players={players} matches={matches} />;
@@ -1432,7 +1546,7 @@ export default function App() {
         <div style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: C.text, letterSpacing: "-0.5px" }}>SQUASH ELO</div>
         {!isMobile && (
           <nav style={{ display: "flex", gap: 4, marginLeft: 16 }}>
-            {TABS.map(t => (
+            {tabs.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "7px 16px", fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase", border: tab === t.id ? `1px solid ${C.accent}` : `1px solid ${C.borderHi}`, background: tab === t.id ? C.accent : "transparent", color: tab === t.id ? "#12121f" : C.muted, cursor: "pointer", borderRadius: 6, fontFamily: FONT, fontWeight: tab === t.id ? 700 : 400 }}>
                 {t.label}
               </button>
@@ -1440,6 +1554,15 @@ export default function App() {
           </nav>
         )}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {identity && identity !== "__guest__" && (
+            <button onClick={() => setShowSwitchSheet(true)}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(136,170,255,0.1)", border: "1px solid rgba(136,170,255,0.25)", borderRadius: 20, padding: "4px 10px 4px 6px", cursor: "pointer", fontFamily: FONT, marginRight: 4 }}>
+              <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#1e3a5f", color: C.accent, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {identity.slice(0, 2).toUpperCase()}
+              </div>
+              {!isMobile && <span style={{ fontSize: 12, color: C.accent, fontWeight: 600 }}>{identity}</span>}
+            </button>
+          )}
           <a
             href={`${API}/api/export`}
             style={{ fontSize: 11, color: hoverXlsx ? C.text : C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px" }}
@@ -1464,7 +1587,7 @@ export default function App() {
       {/* Mobile bottom nav */}
       {isMobile && (
         <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 20, background: "#1A1A18", borderTop: `1px solid ${C.border}`, display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-          {TABS.map(t => {
+          {tabs.map(t => {
             const active = tab === t.id;
             return (
               <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "10px 0 8px", border: "none", background: "transparent", color: active ? C.accent : C.tertiary, cursor: "pointer", fontFamily: FONT, touchAction: "manipulation" }}>
@@ -1475,6 +1598,67 @@ export default function App() {
             );
           })}
         </nav>
+      )}
+
+      {/* Switch identity sheet */}
+      {showSwitchSheet && (
+        <>
+          <div onClick={() => setShowSwitchSheet(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50 }} />
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.surface, borderTop: `1px solid ${C.border}`, borderRadius: "14px 14px 0 0", padding: "16px 16px 32px", zIndex: 51, fontFamily: FONT }}>
+            <div style={{ width: 40, height: 4, background: "#3A3A38", borderRadius: 2, margin: "0 auto 20px" }} />
+            <div style={S.sectionHead}>Playing as</div>
+            {players.map(p => (
+              <button key={p.name} onClick={() => { chooseIdentity(p.name); setShowSwitchSheet(false); }}
+                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", background: p.name === identity ? "rgba(136,170,255,0.08)" : C.surfaceHi, border: `1px solid ${p.name === identity ? C.accent : C.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 8, cursor: "pointer", fontFamily: FONT }}>
+                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#1e3a5f", color: C.accent, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {p.name.slice(0, 2).toUpperCase()}
+                </div>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.text, textAlign: "left" }}>{p.name}</span>
+                {p.name === identity && <span style={{ color: C.accent, fontSize: 14 }}>✓</span>}
+              </button>
+            ))}
+            <div style={{ height: 1, background: C.border, margin: "4px 0 8px" }} />
+            <button onClick={() => { chooseIdentity(null); setShowSwitchSheet(false); }}
+              style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px", color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: FONT, textAlign: "left" }}>
+              View as guest
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Identity selection overlay (first visit) */}
+      {identity === null && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 28, width: "100%", maxWidth: 360, fontFamily: FONT }}>
+            <div style={S.sectionHead}>Squash ELO</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: C.text, marginBottom: 6 }}>Who are you?</div>
+            <div style={{ fontSize: 13, color: C.muted, marginBottom: 24 }}>Pick your name to personalise the app.</div>
+            {loading && [0, 1, 2].map(i => (
+              <div key={i} style={{ height: 64, borderRadius: 10, background: C.surfaceHi, marginBottom: 8, opacity: 0.6 }} />
+            ))}
+            {!loading && players.length === 0 && (
+              <div style={{ fontSize: 13, color: C.muted, textAlign: "center", padding: "16px 0 8px" }}>No players yet — ask the admin to add players.</div>
+            )}
+            {!loading && players.map(p => (
+              <button key={p.name} onClick={() => chooseIdentity(p.name)}
+                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", background: C.surfaceHi, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", fontFamily: FONT, textAlign: "left" }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#1e3a5f", color: C.accent, fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {p.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{p.name}</div>
+                  <div style={{ fontSize: 12, color: C.muted }}>{p.elo.toFixed(0)} ELO</div>
+                </div>
+              </button>
+            ))}
+            <div style={{ height: 1, background: C.border, margin: "8px 0 12px" }} />
+            <button onClick={() => chooseIdentity(null)}
+              style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 10, padding: "13px 16px", color: C.muted, fontSize: 13, cursor: "pointer", fontFamily: FONT, textAlign: "left" }}>
+              View as guest →
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

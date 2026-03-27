@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import ChallengeMode from "./ChallengeMode";
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 // For unified deployment (FastAPI serves frontend), leave VITE_API_URL unset.
@@ -310,7 +311,7 @@ function MatchPreview({ p1, p2, playerMap, matches, onBack, onLogged }) {
 // ════════════════════════════════════════════════════════════════════════════════
 // LOG MATCH
 // ════════════════════════════════════════════════════════════════════════════════
-function LogMatch({ players, matches, onLogged }) {
+function LogMatch({ players, matches, onLogged, preselect, onClearPreselect }) {
   const [p1, setP1] = useState("");
   const [p2, setP2] = useState("");
   const [step, setStep] = useState("select"); // "select" | "preview"
@@ -318,6 +319,14 @@ function LogMatch({ players, matches, onLogged }) {
 
   const names = players.map(p => p.name).sort();
   const playerMap = useMemo(() => Object.fromEntries(players.map(p => [p.name, p])), [players]);
+
+  useEffect(() => {
+    if (preselect) {
+      setP1(preselect.challenger);
+      setP2(preselect.challenged);
+      if (onClearPreselect) onClearPreselect();
+    }
+  }, [preselect]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (p1 && p2 && p1 !== p2) setStep("preview");
@@ -1266,6 +1275,7 @@ const TABS = [
   { id: "season",  icon: "⚑", label: "Season"    },
   { id: "edge",    icon: "◈", label: "Edge"      },
   { id: "history", icon: "≡", label: "Match Log" },
+  { id: "rivals",  icon: "⚔", label: "Rivals"   },
 ];
 
 export default function App() {
@@ -1306,6 +1316,13 @@ export default function App() {
   }
   // ──────────────────────────────────────────────────────────────────────────
 
+  const [matchLogPreselect, setMatchLogPreselect] = useState(null);
+
+  function handleLogMatch(challenger, challenged) {
+    setMatchLogPreselect({ challenger, challenged });
+    setTab("log");
+  }
+
   const fetchAll = useCallback(async () => {
     setLoading(true); setError("");
     try {
@@ -1322,13 +1339,14 @@ export default function App() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const content = () => {
-    if (tab === "log")     return <LogMatch players={players} matches={matches} onLogged={fetchAll} />;
+    if (tab === "log")     return <LogMatch players={players} matches={matches} onLogged={fetchAll} preselect={matchLogPreselect} onClearPreselect={() => setMatchLogPreselect(null)} />;
     if (tab === "players") return <PlayersPage players={players} loading={loading} error={error} onRetry={fetchAll} onAdded={fetchAll} />;
     if (tab === "history") return <MatchHistory matches={matches} onDeleted={fetchAll} isAdmin={isAdmin} adminToken={adminToken} />;
     if (tab === "stats")   return <PlayerStats players={players} matches={matches} />;
     if (tab === "h2h")     return <HeadToHead players={players} matches={matches} />;
     if (tab === "season")  return <SeasonPage />;
     if (tab === "edge")    return <MentalEdge players={players} matches={matches} />;
+    if (tab === "rivals")  return <ChallengeMode players={players.map(p => p.name)} onLogMatch={handleLogMatch} adminToken={adminToken} />;
   };
 
   return (

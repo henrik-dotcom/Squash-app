@@ -60,6 +60,7 @@ const S = {
   btnSmall: { background: "transparent", color: C.accent, border: `1px solid ${C.accent}`, borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
   btnGhost: { background: "transparent", color: C.red, border: `1px solid ${C.red}`, borderRadius: 8, padding: "14px 20px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
   sectionHead: { fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.tertiary, marginBottom: 14, fontWeight: 700 },
+  pageHead: { fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.accent, marginBottom: 14, fontWeight: 700 },
   row: (last) => ({ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: last ? "none" : `1px solid ${C.border}` }),
 };
 
@@ -84,7 +85,7 @@ function Sparkline({ history, w = 44, h = 22 }) {
 
 function EloBar({ elo }) {
   const pct = Math.min(100, Math.max(0, ((elo - 800) / 600) * 100));
-  const col = elo >= 1100 ? C.accent : elo >= 1000 ? C.blue : C.red;
+  const col = elo >= 1100 ? "#E0A84B" : elo >= 1000 ? C.accent : elo >= 900 ? C.muted : C.red;
   return (
     <div style={{ width: "100%", height: 3, background: C.border, borderRadius: 2, overflow: "hidden", marginTop: 5 }}>
       <div style={{ width: `${pct}%`, height: "100%", background: col, borderRadius: 2 }} />
@@ -342,7 +343,7 @@ function LogMatch({ players, matches, onLogged, preselect, onClearPreselect }) {
 
   return (
     <>
-      <div style={S.sectionHead}>Match</div>
+      <div style={S.pageHead}>Match</div>
       {toast && <div style={{ ...S.card, borderColor: "#2a6a2a", background: "#102010", color: C.green, fontSize: 13 }}>{toast}</div>}
 
       {step === "select" && (
@@ -407,7 +408,7 @@ function PlayersPage({ players, loading, error, onRetry, onAdded }) {
 
   return (
     <>
-      <div style={S.sectionHead}>Leaderboard</div>
+      <div style={S.pageHead}>Leaderboard</div>
       {loading && <Spinner />}
       {error && <ErrorBanner msg={error} onRetry={onRetry} />}
       {!loading && !error && (
@@ -481,6 +482,7 @@ function PlayersPage({ players, loading, error, onRetry, onAdded }) {
 // ════════════════════════════════════════════════════════════════════════════════
 function PlayerStats({ players, matches }) {
   const [sel, setSel] = useState("");
+  const [hoverBack, setHoverBack] = useState(false);
   const sorted = [...players].sort((a, b) => b.elo - a.elo);
   const medals = ["🥇", "🥈", "🥉"];
   const p = sel ? players.find(x => x.name === sel) : null;
@@ -488,7 +490,7 @@ function PlayerStats({ players, matches }) {
 
   if (!sel) return (
     <>
-      <div style={S.sectionHead}>Stats</div>
+      <div style={S.pageHead}>Stats</div>
       <div style={S.card}>
         {sorted.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 24 }}>No players yet.</div>}
         {sorted.map((pl, i) => (
@@ -519,7 +521,12 @@ function PlayerStats({ players, matches }) {
 
   return (
     <>
-      <button onClick={() => setSel("")} style={{ ...S.btnSmall, marginBottom: 14, fontSize: 12, padding: "7px 14px" }}>← Back</button>
+      <button
+        onClick={() => setSel("")}
+        style={{ ...S.btnSmall, marginBottom: 14, fontSize: 12, padding: "7px 14px", ...(hoverBack && { background: "rgba(136,170,255,0.12)", borderColor: "#88aaff" }) }}
+        onMouseEnter={() => setHoverBack(true)}
+        onMouseLeave={() => setHoverBack(false)}
+      >← Back</button>
 
       {p && <>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
@@ -591,7 +598,7 @@ function HeadToHead({ players, matches }) {
 
   return (
     <>
-      <div style={S.sectionHead}>Head-to-Head</div>
+      <div style={S.pageHead}>Head-to-Head</div>
       <div style={S.card}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {[{ lbl: "Player A", val: pA, set: setPA, excl: pB }, { lbl: "Player B", val: pB, set: setPB, excl: pA }].map(({ lbl, val, set, excl }) => (
@@ -683,7 +690,7 @@ function MatchHistory({ matches, onDeleted, isAdmin, adminToken }) {
 
   return (
     <>
-      <div style={S.sectionHead}>Match History</div>
+      <div style={S.pageHead}>Match History</div>
       {valid.length === 0 && (
         <div style={{ ...S.card, color: C.muted, textAlign: "center", padding: 36, fontSize: 13 }}>No matches logged yet.</div>
       )}
@@ -727,6 +734,7 @@ function MatchHistory({ matches, onDeleted, isAdmin, adminToken }) {
 // ════════════════════════════════════════════════════════════════════════════════
 function MentalEdge({ players, matches }) {
   const [sel, setSel] = useState("");
+  const [hoverBack, setHoverBack] = useState(false);
   const names = players.map(p => p.name).sort();
   const initials = name => name.trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
@@ -876,7 +884,7 @@ function MentalEdge({ players, matches }) {
 
   if (!sel) return (
     <>
-      <div style={S.sectionHead}>Mental Edge</div>
+      <div style={S.pageHead}>Mental Edge</div>
       <div style={S.card}>
         {sorted.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 24 }}>No players yet.</div>}
         {sorted.map((pl, i) => (
@@ -902,7 +910,12 @@ function MentalEdge({ players, matches }) {
 
   return (
     <>
-      <button onClick={() => setSel("")} style={{ ...S.btnSmall, marginBottom: 14, fontSize: 12, padding: "7px 14px" }}>← Back</button>
+      <button
+        onClick={() => setSel("")}
+        style={{ ...S.btnSmall, marginBottom: 14, fontSize: 12, padding: "7px 14px", ...(hoverBack && { background: "rgba(136,170,255,0.12)", borderColor: "#88aaff" }) }}
+        onMouseEnter={() => setHoverBack(true)}
+        onMouseLeave={() => setHoverBack(false)}
+      >← Back</button>
 
       {!stats && <Spinner />}
 
@@ -1100,11 +1113,11 @@ function SeasonPage() {
     most_active: "Most Active", giant_killer: "Giant Killer",
   };
 
-  if (loading) return <><div style={S.sectionHead}>Season</div><Spinner /></>;
-  if (error) return <><div style={S.sectionHead}>Season</div><ErrorBanner msg={error} /></>;
+  if (loading) return <><div style={S.pageHead}>Season</div><Spinner /></>;
+  if (error) return <><div style={S.pageHead}>Season</div><ErrorBanner msg={error} /></>;
   if (seasons.length === 0) return (
     <>
-      <div style={S.sectionHead}>Season</div>
+      <div style={S.pageHead}>Season</div>
       <div style={{ ...S.card, color: C.muted, textAlign: "center", padding: 36, fontSize: 13 }}>
         No matches logged yet — play some games to start the season!
       </div>
@@ -1116,7 +1129,7 @@ function SeasonPage() {
 
   return (
     <>
-      <div style={S.sectionHead}>Season</div>
+      <div style={S.pageHead}>Season</div>
 
       {/* Sub-tabs */}
       <div style={{ display: "flex", gap: 4, background: C.surface, borderRadius: 10, padding: 3, marginBottom: 16, border: `1px solid ${C.border}` }}>
@@ -1173,7 +1186,16 @@ function SeasonPage() {
                             {" · "}
                             <span style={{ color: C.red }}>{p.losses}L</span>
                             {" · "}
-                            <span style={{ color: streakColor }}>{streakStr}</span>
+                            <span
+                              style={{ color: streakColor, cursor: "default" }}
+                              title={
+                                streak > 0
+                                  ? `Moved up ${streak} place${streak !== 1 ? "s" : ""} this season`
+                                  : streak < 0
+                                  ? `Moved down ${Math.abs(streak)} place${Math.abs(streak) !== 1 ? "s" : ""} this season`
+                                  : "No position change this season"
+                              }
+                            >{streakStr}</span>
                           </div>
                         </div>
                         <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -1283,6 +1305,7 @@ export default function App() {
   const [loginPw, setLoginPw] = useState("");
   const [loginErr, setLoginErr] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+  const [hoverXlsx, setHoverXlsx] = useState(false);
   const isAdmin = !!adminToken;
 
   async function handleLogin() {
@@ -1381,9 +1404,15 @@ export default function App() {
           </nav>
         )}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          <a href={`${API}/api/export`} style={{ fontSize: 11, color: C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px", border: `1px solid ${C.borderHi}`, borderRadius: 5 }}>
+          <a
+            href={`${API}/api/export`}
+            style={{ fontSize: 11, color: hoverXlsx ? C.text : C.muted, textDecoration: "none", letterSpacing: "0.08em", padding: "5px 10px" }}
+            onMouseEnter={() => setHoverXlsx(true)}
+            onMouseLeave={() => setHoverXlsx(false)}
+          >
             ↓ xlsx
           </a>
+          <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.12)", alignSelf: "center" }} />
           {isAdmin
             ? <button onClick={handleLogout} title="Logout" style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 5, color: C.accent, cursor: "pointer", fontSize: 14, padding: "4px 9px", fontFamily: FONT }}>🔓</button>
             : <button onClick={() => setShowLogin(true)} title="Admin login" style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 5, color: C.muted, cursor: "pointer", fontSize: 14, padding: "4px 9px", fontFamily: FONT }}>🔒</button>
@@ -1392,7 +1421,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div style={{ padding: isMobile ? "16px 14px" : "28px 24px", maxWidth: 960, margin: "0 auto" }}>
+      <div style={{ padding: isMobile ? "16px 14px" : "28px 24px", maxWidth: 960, margin: "0 auto", minHeight: isMobile ? "calc(100vh - 56px - 72px)" : "calc(100vh - 56px)" }}>
         {content()}
       </div>
 
@@ -1402,7 +1431,7 @@ export default function App() {
           {TABS.map(t => {
             const active = tab === t.id;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "10px 0 8px", border: "none", background: "transparent", color: active ? C.accent : "#444", cursor: "pointer", fontFamily: FONT, touchAction: "manipulation" }}>
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: "10px 0 8px", border: "none", background: "transparent", color: active ? C.accent : C.tertiary, cursor: "pointer", fontFamily: FONT, touchAction: "manipulation" }}>
                 <span style={{ fontSize: 19, lineHeight: 1 }}>{t.icon}</span>
                 <span style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: active ? 700 : 400 }}>{t.label}</span>
                 {active && <div style={{ width: 18, height: 2, background: C.accent, borderRadius: 1 }} />}

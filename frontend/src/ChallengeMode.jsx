@@ -43,6 +43,7 @@ const S = {
   btnSmall: { background: "transparent", color: C.accent, border: `1px solid ${C.accent}`, borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
   btnGhost: { background: "transparent", color: C.red, border: `1px solid ${C.red}`, borderRadius: 8, padding: "14px 20px", fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: "pointer", touchAction: "manipulation" },
   sectionHead: { fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.tertiary, marginBottom: 14, fontWeight: 700 },
+  pageHead: { fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.accent, marginBottom: 14, fontWeight: 700 },
 };
 
 function badge(type) {
@@ -70,6 +71,9 @@ export default function ChallengeMode({ players, onLogMatch, adminToken }) {
   const [modalError, setModalError] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalSuccess, setModalSuccess] = useState(false);
+  const [hoverFormat, setHoverFormat] = useState(null);
+  const [hoverClose, setHoverClose] = useState(false);
+  const [hoverIssue, setHoverIssue] = useState(false);
 
   const fetchChallenges = useCallback(async () => {
     setLoading(true); setError(null);
@@ -209,13 +213,20 @@ export default function ChallengeMode({ players, onLogMatch, adminToken }) {
     <div>
       {/* Section header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={S.sectionHead}>Active Challenges</div>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{ ...S.btnSmall, fontSize: 12, padding: "7px 14px" }}
-        >
-          + Issue
-        </button>
+        <div style={S.pageHead}>Active Challenges</div>
+        {active.length > 0 && (
+          <button
+            onClick={() => setShowModal(true)}
+            style={{
+              ...S.btnSmall, fontSize: 12, padding: "7px 14px",
+              ...(hoverIssue && { background: "rgba(136,170,255,0.12)", borderColor: "#88aaff" }),
+            }}
+            onMouseEnter={() => setHoverIssue(true)}
+            onMouseLeave={() => setHoverIssue(false)}
+          >
+            + Issue
+          </button>
+        )}
       </div>
 
       {/* Body */}
@@ -280,7 +291,12 @@ export default function ChallengeMode({ players, onLogMatch, adminToken }) {
                   {form.deadline_days !== null ? ` · ${form.deadline_days} days to complete` : ""}
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={closeModal} style={{ ...S.btnSmall, flex: 1 }}>Close</button>
+                  <button
+                    onClick={closeModal}
+                    style={{ ...S.btnSmall, flex: 1, ...(hoverClose && { background: "rgba(136,170,255,0.12)", borderColor: "#88aaff" }) }}
+                    onMouseEnter={() => setHoverClose(true)}
+                    onMouseLeave={() => setHoverClose(false)}
+                  >Close</button>
                   <button onClick={closeModal} style={{ ...S.btn, flex: 1 }}>View Challenges</button>
                 </div>
               </div>
@@ -327,11 +343,13 @@ export default function ChallengeMode({ players, onLogMatch, adminToken }) {
                           onClick={() => setForm(f => ({ ...f, required_wins: n }))}
                           style={{
                             flex: 1, padding: "10px 0", borderRadius: 8, fontSize: 13, fontWeight: 700,
-                            fontFamily: FONT, cursor: "pointer", border: `1px solid ${form.required_wins === n ? C.accent : C.borderHi}`,
-                            background: form.required_wins === n ? "rgba(136,170,255,0.15)" : "transparent",
-                            color: form.required_wins === n ? C.accent : C.muted,
-                            touchAction: "manipulation",
+                            fontFamily: FONT, cursor: "pointer", touchAction: "manipulation",
+                            border: `1px solid ${form.required_wins === n ? C.accent : hoverFormat === n ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.15)"}`,
+                            background: form.required_wins === n ? "rgba(136,170,255,0.15)" : hoverFormat === n ? "rgba(255,255,255,0.05)" : "transparent",
+                            color: form.required_wins === n ? C.accent : hoverFormat === n ? "#ffffff" : C.muted,
                           }}
+                          onMouseEnter={() => setHoverFormat(n)}
+                          onMouseLeave={() => setHoverFormat(null)}
                         >
                           First to {n}
                         </button>

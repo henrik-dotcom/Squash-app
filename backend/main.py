@@ -2,6 +2,7 @@ import sqlite3
 import os
 import pathlib
 import secrets
+import uuid
 from datetime import date, datetime, timedelta
 from contextlib import contextmanager
 from typing import Optional
@@ -11,6 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from models import create_tables
 
 # ─── App setup ────────────────────────────────────────────────────────────────
 app = FastAPI(title="Squash ELO API")
@@ -54,47 +57,44 @@ def get_db():
 
 
 def init_db():
-    # Use a plain connection for init so executescript doesn't fight the context manager
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    try:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS players (
-                id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                name    TEXT UNIQUE NOT NULL,
-                created TEXT DEFAULT (date('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS matches (
-                id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                date    TEXT NOT NULL,
-                p1      TEXT NOT NULL,
-                p2      TEXT NOT NULL,
-                s1      INTEGER NOT NULL,
-                s2      INTEGER NOT NULL,
-                created TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_unique
-                ON matches(date, p1, p2, s1, s2, created);
-
-            CREATE TABLE IF NOT EXISTS challenges (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                challenger      TEXT NOT NULL,
-                challenged      TEXT NOT NULL,
-                required_wins   INTEGER NOT NULL DEFAULT 2,
-                issued_date     TEXT NOT NULL,
-                deadline_date   TEXT,
-                status          TEXT NOT NULL DEFAULT 'open',
-                winner          TEXT,
-                resolved_date   TEXT,
-                created         TEXT DEFAULT (datetime('now'))
-            );
-        """)
-
-        conn.commit()
-    finally:
-        conn.close()
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=OFF")
+    # Legacy tables (kept for safety during migration window)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS players (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            name    TEXT UNIQUE NOT NULL,
+            created TEXT DEFAULT (date('now'))
+        );
+        CREATE TABLE IF NOT EXISTS matches (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            date    TEXT NOT NULL,
+            p1      TEXT NOT NULL,
+            p2      TEXT NOT NULL,
+            s1      INTEGER NOT NULL,
+            s2      INTEGER NOT NULL,
+            created TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS challenges (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            challenger      TEXT NOT NULL,
+            challenged      TEXT NOT NULL,
+            required_wins   INTEGER NOT NULL DEFAULT 2,
+            issued_date     TEXT NOT NULL,
+            deadline_date   TEXT,
+            status          TEXT NOT NULL DEFAULT 'open',
+            winner          TEXT,
+            resolved_date   TEXT,
+            created         TEXT DEFAULT (datetime('now'))
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_unique
+            ON matches(date, p1, p2, s1, s2, created);
+    """)
+    # New tables
+    create_tables(conn)
+    conn.close()
 
 
 init_db()
@@ -352,6 +352,119 @@ def compute_awards(season: dict, min_matches: int = 3) -> dict:
     }
 
 
+# ─── New-schema helpers ────────────────────────────────────────────────────────
+def new_uuid():
+    return str(uuid.uuid4())
+
+def get_main_league(db):
+    row = db.execute("SELECT id FROM league WHERE name='Main League' LIMIT 1").fetchone()
+    return row["id"] if row else None
+
+def get_system_player(db):
+    row = db.execute("SELECT id FROM player WHERE display_name='System' LIMIT 1").fetchone()
+    return row["id"] if row else None
+
+def get_match_rows_new(db):
+    return db.execute("""
+        SELECT
+            COALESCE(m.legacy_id, 900000000 + CAST(m.rowid AS INTEGER)) AS id,
+            m.played_at     AS date,
+            pa.display_name AS p1,
+            pb.display_name AS p2,
+            ms.player_a_score AS s1,
+            ms.player_b_score AS s2,
+            m.created_at    AS created
+        FROM match m
+        JOIN player pa ON pa.id = m.player_a_id
+        JOIN player pb ON pb.id = m.player_b_id
+        JOIN match_set ms ON ms.match_id = m.id AND ms.set_number = 1
+        ORDER BY COALESCE(m.legacy_id, 999999999) ASC, m.created_at ASC
+    """).fetchall()
+
+def get_player_names_new(db):
+    rows = db.execute(
+        "SELECT display_name FROM player WHERE display_name != 'System' ORDER BY display_name"
+    ).fetchall()
+    return [r["display_name"] for r in rows]
+
+def _update_membership_stats(db, league_id, player_names, computed_matches):
+    """Recompute and persist league_membership stats for all players after any match change."""
+    streak_seq    = {name: [] for name in player_names}
+    ch_tracker    = {name: 1000.0 for name in player_names}
+    ch_at_tracker = {name: None for name in player_names}
+    rating_now    = {name: 1000.0 for name in player_names}
+    mp            = {name: 0 for name in player_names}
+    mw            = {name: 0 for name in player_names}
+    last_played   = {name: None for name in player_names}
+
+    for cm in computed_matches:
+        if not cm["valid"]:
+            continue
+        p1, p2 = cm["p1"], cm["p2"]
+        if p1 not in rating_now or p2 not in rating_now:
+            continue
+        winner = cm["winner"]
+        for pname, post in [(p1, cm["p1post"]), (p2, cm["p2post"])]:
+            won = (winner == pname)
+            mp[pname] += 1
+            if won:
+                mw[pname] += 1
+            rating_now[pname] = post
+            if post > ch_tracker[pname]:
+                ch_tracker[pname]    = post
+                ch_at_tracker[pname] = cm["date"]
+            streak_seq[pname].append("W" if won else "L")
+            last_played[pname] = cm["date"]
+
+    now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+    for name in player_names:
+        seq = streak_seq[name]
+        # current streak
+        if seq:
+            last = seq[-1]
+            cur = 0
+            for r in reversed(seq):
+                if r == last:
+                    cur += 1
+                else:
+                    break
+            current_streak = cur if last == "W" else -cur
+        else:
+            current_streak = 0
+
+        # longest win streak
+        longest = 0
+        run = 0
+        for r in seq:
+            if r == "W":
+                run += 1
+                longest = max(longest, run)
+            else:
+                run = 0
+
+        ch_at = (ch_at_tracker[name] + "T00:00:00"
+                 if ch_at_tracker[name] and "T" not in ch_at_tracker[name]
+                 else ch_at_tracker[name])
+        lp = last_played[name]
+        rating_updated_at = (lp + "T00:00:00" if lp and "T" not in lp else lp)
+
+        db.execute(
+            """UPDATE league_membership SET
+               rating=?, career_high=?, career_high_at=?,
+               current_streak=?, longest_win_streak=?,
+               matches_played=?, matches_won=?,
+               rating_updated_at=?
+               WHERE player_id=(SELECT id FROM player WHERE display_name=?)
+               AND league_id=?""",
+            (rating_now[name], ch_tracker[name], ch_at,
+             current_streak, longest,
+             mp[name], mw[name],
+             rating_updated_at,
+             name, league_id)
+        )
+
+
 # ─── Models ───────────────────────────────────────────────────────────────────
 class NewMatch(BaseModel):
     date: Optional[str] = None
@@ -378,9 +491,8 @@ def root():
 @app.get("/api/players")
 def get_players():
     with get_db() as db:
-        rows       = db.execute("SELECT name FROM players ORDER BY name").fetchall()
-        match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
-    names = [r["name"] for r in rows]
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
     _, stats = compute_state(match_rows, names)
     return sorted(stats.values(), key=lambda x: -x["elo"])
 
@@ -391,18 +503,39 @@ def add_player(body: NewPlayer):
     if not name:
         raise HTTPException(400, "Name cannot be empty")
     with get_db() as db:
-        if db.execute("SELECT id FROM players WHERE name=?", (name,)).fetchone():
+        if db.execute("SELECT id FROM player WHERE display_name=?", (name,)).fetchone():
             raise HTTPException(409, f"Player '{name}' already exists")
-        db.execute("INSERT INTO players (name) VALUES (?)", (name,))
+        main_league_id = get_main_league(db)
+        if not main_league_id:
+            raise HTTPException(500, "Main League not found — run migration first")
+        email = f"{name.lower().replace(' ', '.')}@placeholder.local"
+        now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        pid = new_uuid()
+        db.execute(
+            "INSERT INTO player (id, display_name, avatar_url, email, created_at, last_active_at) VALUES (?,?,?,?,?,?)",
+            (pid, name, None, email, now_iso, now_iso)
+        )
+        lm_id = new_uuid()
+        db.execute(
+            """INSERT INTO league_membership
+               (id, player_id, league_id, role, joined_at, is_active,
+                rating, rating_deviation, volatility, rating_updated_at,
+                career_high, career_high_at, current_streak, longest_win_streak,
+                matches_played, matches_won)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (lm_id, pid, main_league_id, "member", now_iso, 1,
+             1000.0, 350.0, 0.06, None,
+             1000.0, None, 0, 0, 0, 0)
+        )
     return {"name": name}
 
 
 @app.get("/api/matches")
 def get_matches():
     with get_db() as db:
-        rows  = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
-        names = [r["name"] for r in db.execute("SELECT name FROM players").fetchall()]
-    computed, _ = compute_state(rows, names)
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
+    computed, _ = compute_state(match_rows, names)
     return computed
 
 
@@ -421,20 +554,59 @@ def log_match(body: NewMatch):
 
     with get_db() as db:
         for pname in [body.p1, body.p2]:
-            if not db.execute("SELECT id FROM players WHERE name=?", (pname,)).fetchone():
+            if not db.execute("SELECT id FROM player WHERE display_name=?", (pname,)).fetchone():
                 raise HTTPException(404, f"Player '{pname}' not found")
 
-        cur = db.execute(
-            "INSERT INTO matches (date,p1,p2,s1,s2) VALUES (?,?,?,?,?)",
-            (match_date, body.p1, body.p2, body.s1, body.s2)
-        )
-        new_id = cur.lastrowid
-        rows  = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
-        names = [r["name"] for r in db.execute("SELECT name FROM players").fetchall()]
+        main_league_id = get_main_league(db)
+        if not main_league_id:
+            raise HTTPException(500, "Main League not found — run migration first")
+        system_player_id = get_system_player(db)
 
-    computed, _ = compute_state(rows, names)
-    new_match = next((m for m in computed if m["id"] == new_id), None)
-    return new_match
+        # Assign legacy_id for API compatibility
+        legacy_id_row = db.execute("SELECT COALESCE(MAX(legacy_id),0)+1 FROM match").fetchone()
+        legacy_id = legacy_id_row[0]
+
+        p1_row = db.execute("SELECT id FROM player WHERE display_name=?", (body.p1,)).fetchone()
+        p2_row = db.execute("SELECT id FROM player WHERE display_name=?", (body.p2,)).fetchone()
+        player_a_id = p1_row["id"]
+        player_b_id = p2_row["id"]
+
+        # Determine winner
+        winner_id = player_a_id if body.s1 > body.s2 else player_b_id
+
+        now_iso  = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        match_uuid = new_uuid()
+
+        db.execute(
+            """INSERT INTO match
+               (id, league_id, player_a_id, player_b_id, winner_id,
+                match_type, status, logged_by, confirmed_by, confirmed_at,
+                venue, notes, played_at, created_at, legacy_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (match_uuid, main_league_id, player_a_id, player_b_id, winner_id,
+             "league", "confirmed", system_player_id or match_uuid, None, None,
+             None, None, match_date, now_iso, legacy_id)
+        )
+
+        set_uuid = new_uuid()
+        db.execute(
+            """INSERT INTO match_set
+               (id, match_id, set_number, player_a_score, player_b_score, winner_id)
+               VALUES (?,?,?,?,?,?)""",
+            (set_uuid, match_uuid, 1, body.s1, body.s2, winner_id)
+        )
+
+        # Fetch all rows and recompute
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
+
+        computed, _ = compute_state(match_rows, names)
+        _update_membership_stats(db, main_league_id, names, computed)
+
+    match_result = next((m for m in computed if m["id"] == legacy_id), None)
+    if match_result is None:
+        raise HTTPException(status_code=500, detail="Match was saved but could not be retrieved")
+    return match_result
 
 
 @app.post("/api/admin/login")
@@ -450,10 +622,39 @@ def admin_login(body: AdminLogin):
 def reset_db(authorization: Optional[str] = Header(None)):
     require_admin(authorization)
     with get_db() as db:
+        db.execute("PRAGMA foreign_keys=OFF")
+        # New tables — delete in dependency order
+        db.execute("DELETE FROM rating_snapshot")
+        db.execute("DELETE FROM match_set")
+        db.execute("DELETE FROM challenge")
+        db.execute("DELETE FROM match")
+        db.execute("DELETE FROM league_membership")
+        db.execute("DELETE FROM league")
+        db.execute("DELETE FROM player")
+        # Legacy tables
         db.execute("DELETE FROM matches")
         db.execute("DELETE FROM players")
         db.execute("DELETE FROM challenges")
         db.execute("DELETE FROM sqlite_sequence WHERE name IN ('matches','players','challenges')")
+
+        # Re-seed System player + Main League
+        now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        system_id = new_uuid()
+        db.execute(
+            "INSERT INTO player (id, display_name, avatar_url, email, created_at, last_active_at) VALUES (?,?,?,?,?,?)",
+            (system_id, "System", None, "system@placeholder.local", now_iso, now_iso)
+        )
+        league_id  = new_uuid()
+        invite_code = uuid.uuid4().hex[:8].upper()
+        db.execute(
+            """INSERT INTO league
+               (id, name, created_by, league_type, scoring_format, points_to_win,
+                is_active, season_start, season_end, invite_code, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (league_id, "Main League", system_id, "ladder", "single_game",
+             11, 1, None, None, invite_code, now_iso)
+        )
+        db.execute("PRAGMA foreign_keys=ON")
     return {"status": "reset"}
 
 
@@ -461,17 +662,31 @@ def reset_db(authorization: Optional[str] = Header(None)):
 def delete_match(match_id: int, authorization: Optional[str] = Header(None)):
     require_admin(authorization)
     with get_db() as db:
-        if not db.execute("SELECT id FROM matches WHERE id=?", (match_id,)).fetchone():
+        row = db.execute("SELECT id FROM match WHERE legacy_id=?", (match_id,)).fetchone()
+        if not row:
             raise HTTPException(404, "Match not found")
-        db.execute("DELETE FROM matches WHERE id=?", (match_id,))
+        match_uuid = row["id"]
+
+        db.execute("DELETE FROM match_set WHERE match_id=?", (match_uuid,))
+        db.execute("DELETE FROM rating_snapshot WHERE match_id=?", (match_uuid,))
+        db.execute("DELETE FROM match WHERE id=?", (match_uuid,))
+
+        # Recompute all membership ratings
+        main_league_id = get_main_league(db)
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
+        computed, _ = compute_state(match_rows, names)
+        if main_league_id:
+            _update_membership_stats(db, main_league_id, names, computed)
+
     return {"deleted": match_id}
 
 
 @app.get("/api/stats")
 def get_stats():
     with get_db() as db:
-        match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
-        names      = [r["name"] for r in db.execute("SELECT name FROM players ORDER BY name").fetchall()]
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
     computed, stats = compute_state(match_rows, names)
     return {
         "players": sorted(stats.values(), key=lambda x: -x["elo"]),
@@ -488,8 +703,8 @@ def export_excel():
         raise HTTPException(500, "openpyxl not installed")
 
     with get_db() as db:
-        match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
-        names      = [r["name"] for r in db.execute("SELECT name FROM players ORDER BY name").fetchall()]
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
 
     computed, stats = compute_state(match_rows, names)
 
@@ -539,8 +754,8 @@ def export_excel():
 @app.get("/api/seasons")
 def get_seasons():
     with get_db() as db:
-        match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
-        names      = [r["name"] for r in db.execute("SELECT name FROM players ORDER BY name").fetchall()]
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
 
     if not names:
         return []
@@ -568,8 +783,8 @@ def get_seasons():
 @app.get("/api/seasons/{season_id}")
 def get_season(season_id: str):
     with get_db() as db:
-        match_rows = db.execute("SELECT id,date,p1,p2,s1,s2 FROM matches ORDER BY id").fetchall()
-        names      = [r["name"] for r in db.execute("SELECT name FROM players ORDER BY name").fetchall()]
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
 
     if not names:
         raise HTTPException(404, "No players found")
@@ -599,16 +814,12 @@ def get_season(season_id: str):
 # ─── Challenger Mode ──────────────────────────────────────────────────────────
 @app.post("/api/challenges", status_code=201)
 def create_challenge(body: ChallengeCreate):
-    # Validation 1: non-empty strings (Pydantic delivers them as strings; check strip)
     if not body.challenger.strip() or not body.challenged.strip():
         raise HTTPException(422, "challenger and challenged must be non-empty strings")
-    # Validation 2: different players
     if body.challenger == body.challenged:
         raise HTTPException(400, "A player cannot challenge themselves")
-    # Validation 3: required_wins
     if body.required_wins not in (2, 3):
         raise HTTPException(400, "required_wins must be 2 or 3")
-    # Validation 4: deadline_days
     if body.deadline_days is not None and body.deadline_days not in (7, 14, 30):
         raise HTTPException(400, "deadline_days must be 7, 14, 30, or null")
 
@@ -617,31 +828,63 @@ def create_challenge(body: ChallengeCreate):
         (datetime.utcnow() + timedelta(days=body.deadline_days)).strftime("%Y-%m-%d")
         if body.deadline_days is not None else None
     )
+    expires_at = (deadline_date + "T23:59:59") if deadline_date else None
+    now_iso    = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
 
     with get_db() as db:
-        # Validation 5: both players must exist (check challenger first)
         for pname in [body.challenger, body.challenged]:
-            if not db.execute("SELECT id FROM players WHERE name=?", (pname,)).fetchone():
+            if not db.execute("SELECT id FROM player WHERE display_name=?", (pname,)).fetchone():
                 raise HTTPException(404, f"Player not found: {pname}")
-        # Validation 6: no existing open challenge between same pair
+
+        challenger_row = db.execute("SELECT id FROM player WHERE display_name=?", (body.challenger,)).fetchone()
+        challenged_row = db.execute("SELECT id FROM player WHERE display_name=?", (body.challenged,)).fetchone()
+        challenger_uuid = challenger_row["id"]
+        challenged_uuid = challenged_row["id"]
+
+        main_league_id = get_main_league(db)
+        if not main_league_id:
+            raise HTTPException(500, "Main League not found — run migration first")
+
+        # No existing pending challenge between same pair
         existing = db.execute(
-            """SELECT id FROM challenges
-               WHERE status = 'open'
-               AND ((challenger = ? AND challenged = ?) OR (challenger = ? AND challenged = ?))""",
-            (body.challenger, body.challenged, body.challenged, body.challenger)
+            """SELECT id FROM challenge
+               WHERE status = 'pending'
+               AND ((challenger_id = ? AND challenged_id = ?)
+                    OR (challenger_id = ? AND challenged_id = ?))""",
+            (challenger_uuid, challenged_uuid, challenged_uuid, challenger_uuid)
         ).fetchone()
         if existing:
             raise HTTPException(400, "An open challenge already exists between these players")
 
-        cur = db.execute(
-            """INSERT INTO challenges (challenger, challenged, required_wins, issued_date, deadline_date)
-               VALUES (?, ?, ?, ?, ?)""",
-            (body.challenger, body.challenged, body.required_wins, issued_date, deadline_date)
-        )
-        new_id = cur.lastrowid
-        row = db.execute("SELECT * FROM challenges WHERE id=?", (new_id,)).fetchone()
+        legacy_id_row = db.execute("SELECT COALESCE(MAX(legacy_id),0)+1 FROM challenge").fetchone()
+        legacy_id = legacy_id_row[0]
 
-    return dict(row)
+        ch_uuid = new_uuid()
+        db.execute(
+            """INSERT INTO challenge
+               (id, league_id, challenger_id, challenged_id,
+                status, match_id, message, expires_at,
+                created_at, responded_at,
+                legacy_id, legacy_required_wins, legacy_winner, legacy_resolved_date)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (ch_uuid, main_league_id, challenger_uuid, challenged_uuid,
+             "pending", None, None, expires_at,
+             now_iso, None,
+             legacy_id, body.required_wins, None, None)
+        )
+
+    return {
+        "id":            legacy_id,
+        "challenger":    body.challenger,
+        "challenged":    body.challenged,
+        "required_wins": body.required_wins,
+        "issued_date":   issued_date,
+        "deadline_date": deadline_date,
+        "status":        "open",
+        "winner":        None,
+        "resolved_date": None,
+        "created":       now_iso,
+    }
 
 
 @app.get("/api/challenges")
@@ -650,25 +893,56 @@ def get_challenges():
 
     with get_db() as db:
         rows = db.execute(
-            "SELECT * FROM challenges ORDER BY created DESC"
+            """SELECT
+                   c.id AS uuid,
+                   c.legacy_id,
+                   c.legacy_required_wins,
+                   c.legacy_winner,
+                   c.legacy_resolved_date,
+                   c.status,
+                   c.expires_at,
+                   c.created_at,
+                   c.responded_at,
+                   pa.display_name AS challenger,
+                   pb.display_name AS challenged
+               FROM challenge c
+               JOIN player pa ON pa.id = c.challenger_id
+               JOIN player pb ON pb.id = c.challenged_id
+               ORDER BY c.created_at DESC"""
         ).fetchall()
+
+        # Status translation: DB vocab → API vocab
+        _status_to_api = {
+            "pending":  "open",
+            "accepted": "resolved",
+            "expired":  "expired",
+            "declined": "cancelled",
+        }
 
         result = []
         for row in rows:
             ch = dict(row)
             challenger    = ch["challenger"]
             challenged    = ch["challenged"]
-            issued_date   = ch["issued_date"]
-            required_wins = ch["required_wins"]
-            stored_status = ch["status"]
-            deadline_date = ch["deadline_date"]
+            required_wins = ch["legacy_required_wins"]
+            stored_status = ch["status"]  # DB vocab
+            expires_at    = ch["expires_at"]
+            deadline_date = expires_at[:10] if expires_at else None
+            issued_date   = ch["created_at"][:10] if ch["created_at"] else None
 
             # Step 1 — fetch relevant matches since issued_date
             match_rows = db.execute(
-                """SELECT p1, p2, s1, s2, date FROM matches
-                   WHERE ((p1 = ? AND p2 = ?) OR (p1 = ? AND p2 = ?))
-                   AND date >= ?
-                   ORDER BY date ASC, id ASC""",
+                """SELECT pa.display_name AS p1, pb.display_name AS p2,
+                          ms.player_a_score AS s1, ms.player_b_score AS s2,
+                          m.played_at AS date
+                   FROM match m
+                   JOIN player pa ON pa.id = m.player_a_id
+                   JOIN player pb ON pb.id = m.player_b_id
+                   JOIN match_set ms ON ms.match_id = m.id AND ms.set_number = 1
+                   WHERE ((pa.display_name = ? AND pb.display_name = ?)
+                       OR (pa.display_name = ? AND pb.display_name = ?))
+                   AND m.played_at >= ?
+                   ORDER BY m.played_at ASC, m.created_at ASC""",
                 (challenger, challenged, challenged, challenger, issued_date)
             ).fetchall()
 
@@ -688,34 +962,38 @@ def get_challenges():
 
                 if challenger_wins >= required_wins:
                     computed_winner = challenger
-                    computed_resolved_date = m["date"]
+                    computed_resolved_date = m["date"][:10]
                     break
                 if challenged_wins >= required_wins:
                     computed_winner = challenged
-                    computed_resolved_date = m["date"]
+                    computed_resolved_date = m["date"][:10]
                     break
 
-            # Step 3 — compute status
-            if stored_status == "cancelled":
-                computed_status = "cancelled"
+            # Step 3 — compute status (in DB vocab)
+            if stored_status == "declined":
+                new_db_status = "declined"
+                computed_winner = ch["legacy_winner"]
+                computed_resolved_date = ch["legacy_resolved_date"]
             elif computed_winner:
-                computed_status = "resolved"
+                new_db_status = "accepted"
             elif deadline_date and today > deadline_date:
-                computed_status = "expired"
+                new_db_status = "expired"
             else:
-                computed_status = "open"
+                new_db_status = "pending"
 
             # Step 4 — write-back if status changed
-            if (computed_status != stored_status
-                    or computed_winner != ch.get("winner")
-                    or computed_resolved_date != ch.get("resolved_date")):
+            if (new_db_status != stored_status
+                    or computed_winner != ch.get("legacy_winner")
+                    or computed_resolved_date != ch.get("legacy_resolved_date")):
+                responded_at = (computed_resolved_date + "T00:00:00"
+                                if computed_resolved_date else ch["responded_at"])
                 db.execute(
-                    "UPDATE challenges SET status = ?, winner = ?, resolved_date = ? WHERE id = ?",
-                    (computed_status, computed_winner, computed_resolved_date, ch["id"])
+                    """UPDATE challenge SET
+                       status=?, legacy_winner=?, legacy_resolved_date=?, responded_at=?
+                       WHERE id=?""",
+                    (new_db_status, computed_winner, computed_resolved_date,
+                     responded_at, ch["uuid"])
                 )
-                ch["status"]        = computed_status
-                ch["winner"]        = computed_winner
-                ch["resolved_date"] = computed_resolved_date
 
             # Step 5 — days_remaining
             if deadline_date:
@@ -725,10 +1003,22 @@ def get_challenges():
             else:
                 days_remaining = None
 
-            ch["challenger_wins"] = challenger_wins
-            ch["challenged_wins"] = challenged_wins
-            ch["days_remaining"]  = days_remaining
-            result.append(ch)
+            # Return in old API shape
+            result.append({
+                "id":              ch["legacy_id"],
+                "challenger":      challenger,
+                "challenged":      challenged,
+                "required_wins":   required_wins,
+                "issued_date":     issued_date,
+                "deadline_date":   deadline_date,
+                "status":          _status_to_api.get(new_db_status, new_db_status),
+                "winner":          computed_winner,
+                "resolved_date":   computed_resolved_date,
+                "created":         ch["created_at"],
+                "challenger_wins": challenger_wins,
+                "challenged_wins": challenged_wins,
+                "days_remaining":  days_remaining,
+            })
 
     return result
 
@@ -737,13 +1027,19 @@ def get_challenges():
 def cancel_challenge(challenge_id: int, authorization: Optional[str] = Header(None)):
     require_admin(authorization)
     with get_db() as db:
-        row = db.execute("SELECT * FROM challenges WHERE id=?", (challenge_id,)).fetchone()
+        row = db.execute(
+            "SELECT id, status FROM challenge WHERE legacy_id=?", (challenge_id,)
+        ).fetchone()
         if not row:
             raise HTTPException(404, "Challenge not found")
         status = row["status"]
-        if status in ("resolved", "cancelled"):
-            raise HTTPException(400, f"Challenge is already {status} and cannot be cancelled")
-        db.execute("UPDATE challenges SET status = 'cancelled' WHERE id = ?", (challenge_id,))
+        if status in ("accepted", "declined"):
+            api_status = "resolved" if status == "accepted" else "cancelled"
+            raise HTTPException(400, f"Challenge is already {api_status} and cannot be cancelled")
+        db.execute(
+            "UPDATE challenge SET status='declined', responded_at=datetime('now') WHERE id=?",
+            (row["id"],)
+        )
     return {"message": "Challenge cancelled"}
 
 

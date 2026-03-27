@@ -389,7 +389,7 @@ function LogMatch({ players, matches, onLogged, preselect, onClearPreselect }) {
 // ════════════════════════════════════════════════════════════════════════════════
 // PLAYERS PAGE (roster + add player)
 // ════════════════════════════════════════════════════════════════════════════════
-function PlayersPage({ players, loading, error, onRetry, onAdded }) {
+function PlayersPage({ players, loading, error, onRetry, onAdded, lastMatch }) {
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
@@ -419,6 +419,16 @@ function PlayersPage({ players, loading, error, onRetry, onAdded }) {
   return (
     <>
       <div style={S.pageHead}>Leaderboard</div>
+      {lastMatch && (
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 10, letterSpacing: "0.04em" }}>
+          Last match{" "}
+          <span style={{ color: C.text }}>
+            {lastMatch.days === 0 ? "today" : lastMatch.days === 1 ? "yesterday" : `${lastMatch.days} days ago`}
+          </span>
+          {" · "}
+          <span style={{ color: C.tertiary }}>{lastMatch.p1} vs {lastMatch.p2}</span>
+        </div>
+      )}
       {loading && <Spinner />}
       {error && <ErrorBanner msg={error} onRetry={onRetry} />}
       {!loading && !error && (
@@ -498,6 +508,12 @@ function PlayerStats({ players, matches }) {
   const p = sel ? players.find(x => x.name === sel) : null;
   const recent = p ? matches.filter(m => m.valid && (m.p1 === sel || m.p2 === sel)).slice(-5).reverse() : [];
 
+  const playerMatches = p ? matches.filter(m => (m.p1 === sel || m.p2 === sel) && m.valid) : [];
+  const winMatches  = playerMatches.filter(m => m.winner === sel);
+  const lossMatches = playerMatches.filter(m => m.winner && m.winner !== sel);
+  const avgWinMargin  = winMatches.length === 0  ? "—" : `+${(winMatches.reduce((s, m)  => s + Math.abs(m.s1 - m.s2), 0) / winMatches.length).toFixed(1)}`;
+  const avgLossMargin = lossMatches.length === 0 ? "—" : `-${(lossMatches.reduce((s, m) => s + Math.abs(m.s1 - m.s2), 0) / lossMatches.length).toFixed(1)}`;
+
   if (!sel) return (
     <>
       <div style={S.pageHead}>Stats</div>
@@ -546,8 +562,10 @@ function PlayerStats({ players, matches }) {
           <StatTile label="Played" val={p.matches} />
           <StatTile label="Wins"   val={p.wins}   color={C.green} />
           <StatTile label="Losses" val={p.losses} color={C.red} />
-          <StatTile label="Win %"  val={p.matches > 0 ? `${(p.wins / p.matches * 100).toFixed(0)}%` : "—"} />
-          <StatTile label="K"      val={p.elo >= 2000 ? 10 : p.matches >= 30 ? 20 : 40} color={C.muted} />
+          <StatTile label="Win %"      val={p.matches > 0 ? `${(p.wins / p.matches * 100).toFixed(0)}%` : "—"} />
+          <StatTile label="Win Margin"  val={avgWinMargin}  color={avgWinMargin  === "—" ? C.muted : C.green} />
+          <StatTile label="Loss Margin" val={avgLossMargin} color={avgLossMargin === "—" ? C.muted : C.red} />
+          <StatTile label="K"           val={p.elo >= 2000 ? 10 : p.matches >= 30 ? 20 : 40} color={C.muted} />
         </div>
 
         <div style={S.card}>
@@ -1361,9 +1379,17 @@ export default function App() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  const lastMatch = useMemo(() => {
+    const valid = matches.filter(m => m.valid && m.date);
+    if (valid.length === 0) return null;
+    const m = valid.reduce((a, b) => (a.date >= b.date ? a : b));
+    const days = Math.max(0, Math.floor((new Date() - new Date(m.date)) / 86400000));
+    return { p1: m.p1, p2: m.p2, days };
+  }, [matches]);
+
   const content = () => {
     if (tab === "log")     return <LogMatch players={players} matches={matches} onLogged={fetchAll} preselect={matchLogPreselect} onClearPreselect={() => setMatchLogPreselect(null)} />;
-    if (tab === "players") return <PlayersPage players={players} loading={loading} error={error} onRetry={fetchAll} onAdded={fetchAll} />;
+    if (tab === "players") return <PlayersPage players={players} loading={loading} error={error} onRetry={fetchAll} onAdded={fetchAll} lastMatch={lastMatch} />;
     if (tab === "history") return <MatchHistory matches={matches} onDeleted={fetchAll} isAdmin={isAdmin} adminToken={adminToken} />;
     if (tab === "stats")   return <PlayerStats players={players} matches={matches} />;
     if (tab === "h2h")     return <HeadToHead players={players} matches={matches} />;

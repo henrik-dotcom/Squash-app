@@ -360,7 +360,7 @@ function LogMatch({ players, matches, onLogged, preselect, onClearPreselect }) {
                   const selected = (p1 === a && p2 === b) || (p1 === b && p2 === a);
                   return (
                     <button key={`${a}-${b}`}
-                      style={{ ...S.btn, flex: 1, minWidth: 100, background: selected ? C.accent : C.surface, opacity: selected ? 1 : 0.6, border: `1px solid ${selected ? C.accent : C.border}` }}
+                      style={{ ...S.btn, flex: 1, minWidth: 100, background: selected ? C.accent : C.surface, color: selected ? "#0a0a0f" : C.text, opacity: selected ? 1 : 0.6, border: `1px solid ${selected ? C.accent : C.border}` }}
                       onClick={() => { setP1(a); setP2(b); }}>
                       {a} vs {b}
                     </button>

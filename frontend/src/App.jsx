@@ -1079,9 +1079,224 @@ function MentalEdge({ players, matches }) {
 
 
 // ════════════════════════════════════════════════════════════════════════════════
+// SEASON REPORT
+// ════════════════════════════════════════════════════════════════════════════════
+function SeasonReport({ playerName, standing, seasonMeta, matches, onBack, onSelectPlayer }) {
+  if (!standing || !seasonMeta || !seasonMeta.start) return <Spinner />;
+
+  const seasonStart = seasonMeta.start;
+  const seasonEnd   = seasonMeta.end;
+
+  const seasonMatches = matches
+    .filter(m =>
+      m.valid &&
+      m.date >= seasonStart &&
+      m.date <= seasonEnd &&
+      (m.p1 === playerName || m.p2 === playerName)
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const { elo, wins, losses, delta, peak, low, giant_kills, streak, season_start_elo } = standing;
+  const played = wins + losses;
+
+  const eloHistory = [
+    season_start_elo,
+    ...seasonMatches
+      .map(m => m.p1 === playerName ? m.p1post : m.p2post)
+      .filter(v => v != null)
+  ];
+
+  const opponentMap = {};
+  for (const m of seasonMatches) {
+    const opp = m.p1 === playerName ? m.p2 : m.p1;
+    const won = m.winner === playerName;
+    const margin = Math.abs(m.s1 - m.s2);
+    if (!opponentMap[opp]) opponentMap[opp] = { wins: 0, losses: 0, winMargins: [], lossMargins: [] };
+    if (won) { opponentMap[opp].wins++; opponentMap[opp].winMargins.push(margin); }
+    else     { opponentMap[opp].losses++; opponentMap[opp].lossMargins.push(margin); }
+  }
+  const opponents = Object.entries(opponentMap)
+    .map(([name, d]) => ({
+      name,
+      wins: d.wins, losses: d.losses,
+      avgWinMargin:  d.winMargins.length  ? (d.winMargins.reduce((a,b)=>a+b,0)  / d.winMargins.length).toFixed(1) : null,
+      avgLossMargin: d.lossMargins.length ? (d.lossMargins.reduce((a,b)=>a+b,0) / d.lossMargins.length).toFixed(1) : null,
+    }))
+    .sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses));
+
+  const bestOpp  = opponents.length ? [...opponents].sort((a,b) => b.wins   - a.wins)[0]   : null;
+  const toughOpp = opponents.length ? [...opponents].sort((a,b) => b.losses - a.losses)[0] : null;
+  const hasBest  = bestOpp  != null && bestOpp.wins   > 0;
+  const hasTough = toughOpp != null && toughOpp.losses > 0;
+
+  const verdictHeadline =
+    delta >= 30 && wins > losses ? "STRONG SEASON" :
+    delta >= 5  && wins > losses ? "GOOD SEASON"   :
+    delta >= 5                   ? "MIXED SEASON"  :
+    delta > -5                   ? "STEADY SEASON" :
+    delta > -30                  ? "TOUGH SEASON"  : "ROUGH SEASON";
+
+  const verdictColor  = delta >= 5 ? C.green  : delta <= -5 ? C.red  : C.muted;
+  const verdictBg     = delta >= 5 ? "#1a2e1a" : delta <= -5 ? "#2e1a1a" : "#1e1e1a";
+  const verdictBorder = delta >= 5 ? "#2a5a2a" : delta <= -5 ? "#5a2a2a" : C.border;
+
+  let verdictBody = `Net ${delta >= 0 ? "+" : ""}${Math.round(delta)} ELO`;
+  if (hasBest && bestOpp.wins >= 2)          verdictBody += ` · beat ${bestOpp.name} ${bestOpp.wins}×`;
+  else if (hasTough && toughOpp.losses >= 2) verdictBody += ` · struggled vs ${toughOpp.name}`;
+  else if (giant_kills > 0)                  verdictBody += ` · ${giant_kills} giant kill${giant_kills > 1 ? "s" : ""}`;
+
+  if (played === 0) {
+    return (
+      <>
+        <div style={{ fontSize: 13, color: C.accent, cursor: "pointer", marginBottom: 16 }} onClick={onBack}>
+          ← {seasonMeta.name}
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.text, marginBottom: 20 }}>{playerName}</div>
+        <div style={{ ...S.card, textAlign: "center", padding: 28, color: C.muted, fontSize: 13 }}>
+          No matches played this season. Starting ELO: {season_start_elo != null ? Math.round(season_start_elo) : "—"}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ fontSize: 13, color: C.accent, cursor: "pointer", marginBottom: 12 }} onClick={onBack}>
+        ← {seasonMeta.name}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: C.text, letterSpacing: "-0.02em", marginBottom: 20 }}>
+        {playerName}
+      </div>
+
+      <div style={{ background: verdictBg, border: `1px solid ${verdictBorder}`, borderRadius: 10, padding: 14, marginBottom: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: verdictColor, marginBottom: 4 }}>
+          {verdictHeadline}
+        </div>
+        <div style={{ fontSize: 13, color: C.text }}>{verdictBody}</div>
+      </div>
+
+      <div style={{ ...S.card, marginBottom: 20 }}>
+        <div style={S.sectionHead}>ELO Journey</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: C.text }}>{season_start_elo != null ? Math.round(season_start_elo) : "—"}</div>
+            <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.1em" }}>start</div>
+          </div>
+          <div style={{ flex: 1, height: 1, background: C.border, marginBottom: 8 }} />
+          <div style={{ textAlign: "right" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.text }}>{elo != null ? Math.round(elo) : "—"}</div>
+              <span style={badge(delta >= 0 ? "green" : "red")}>{delta >= 0 ? "+" : ""}{Math.round(delta)}</span>
+            </div>
+            <div style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.1em" }}>final</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ fontSize: 12 }}>
+            <span style={{ color: C.green }}>▲ Peak </span>
+            <span style={{ color: C.green, fontWeight: 700 }}>{peak != null ? Math.round(peak) : "—"}</span>
+          </div>
+          <div style={{ fontSize: 12 }}>
+            <span style={{ color: C.red }}>▼ Low </span>
+            <span style={{ color: C.red, fontWeight: 700 }}>{low != null ? Math.round(low) : "—"}</span>
+          </div>
+        </div>
+        {eloHistory.length >= 2 && (
+          <div style={{ marginBottom: 12 }}><Sparkline history={eloHistory} w={300} h={48} /></div>
+        )}
+        <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted }}>
+          Verdict: <span style={{ color: verdictColor }}>
+            {delta >= 5 ? "Improved" : delta <= -5 ? "Declined" : "Held steady"}
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+        <StatTile label="Wins"     val={wins}    color={wins   > 0 ? C.green  : C.muted} />
+        <StatTile label="Losses"   val={losses}  color={losses > 0 ? C.red    : C.muted} />
+        <StatTile label="Win %"    val={played > 0 ? `${Math.round(wins / played * 100)}%` : "—"} />
+        <StatTile label="Played"   val={played} />
+        <StatTile label="G. Kills" val={giant_kills} color={giant_kills > 0 ? C.orange : C.muted} />
+        <StatTile label="Streak"   val={streak > 0 ? `+${streak}` : streak} color={streak > 0 ? C.green : streak < 0 ? C.red : C.muted} />
+      </div>
+
+      {opponents.length > 0 && (
+        <div style={{ ...S.card, marginBottom: 20 }}>
+          <div style={S.sectionHead}>Opponent Breakdown</div>
+          {opponents.map((opp, i) => {
+            const isBest  = hasBest  && opp.name === bestOpp.name;
+            const isTough = hasTough && opp.name === toughOpp.name;
+            return (
+              <div key={opp.name} style={{ paddingBottom: 12, marginBottom: 12, borderBottom: i === opponents.length - 1 ? "none" : `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {isBest  && <span style={{ color: "#E0A84B" }}>★</span>}
+                    {isTough && !isBest && <span style={{ color: C.red }}>●</span>}
+                    {!isBest && !isTough && <span style={{ display: "inline-block", width: 14 }} />}
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.accent, cursor: "pointer" }} onClick={() => onSelectPlayer(opp.name)}>
+                      {opp.name}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13 }}>
+                    <span style={{ color: C.green }}>{opp.wins}W</span>
+                    <span style={{ color: C.muted }}> · </span>
+                    <span style={{ color: C.red }}>{opp.losses}L</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 4 }}>
+                  {isBest  && <span style={{ ...badge("green"), fontSize: 10 }}>▲ BEST OPP</span>}
+                  {isTough && <span style={{ ...badge("red"),   fontSize: 10 }}>▼ TOUGHEST</span>}
+                </div>
+                {opp.avgWinMargin  && <div style={{ fontSize: 12, color: C.muted }}>Avg win margin: <span style={{ color: C.green }}>+{opp.avgWinMargin}</span></div>}
+                {opp.avgLossMargin && <div style={{ fontSize: 12, color: C.muted }}>Avg loss margin: <span style={{ color: C.red }}>–{opp.avgLossMargin}</span></div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {seasonMatches.length > 0 && (
+        <div style={S.card}>
+          <div style={S.sectionHead}>Match Timeline</div>
+          {seasonMatches.map((m, i) => {
+            const isP1 = m.p1 === playerName;
+            const opp  = isP1 ? m.p2 : m.p1;
+            const won  = m.winner === playerName;
+            const score = isP1 ? `${m.s1}–${m.s2}` : `${m.s2}–${m.s1}`;
+            const myPre  = isP1 ? m.p1pre  : m.p2pre;
+            const myPost = isP1 ? m.p1post : m.p2post;
+            const eloDelta = myPost != null && myPre != null ? Math.round(myPost - myPre) : null;
+            const dateStr = m.date
+              ? new Date(m.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+              : "—";
+            return (
+              <div key={m.id} style={{ padding: "12px 0", borderBottom: i === seasonMatches.length - 1 ? "none" : `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, fontSize: 11, color: C.muted }}>
+                  <span>{dateStr}</span><span>·</span><span>vs</span>
+                  <span style={{ fontWeight: 700, color: C.accent, cursor: "pointer" }} onClick={() => onSelectPlayer(opp)}>{opp}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{score}</span>
+                  <span style={badge(won ? "green" : "red")}>{won ? "W" : "L"}</span>
+                  {eloDelta != null && (
+                    <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 700, color: eloDelta >= 0 ? C.green : C.red }}>
+                      {eloDelta >= 0 ? "+" : ""}{eloDelta}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
 // SEASON PAGE
 // ════════════════════════════════════════════════════════════════════════════════
-function SeasonPage() {
+function SeasonPage({ matches }) {
   const [subTab, setSubTab] = useState("standings");
   const [seasons, setSeasons] = useState([]);
   const [selectedSid, setSelectedSid] = useState(null);
@@ -1089,6 +1304,7 @@ function SeasonPage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
 
   useEffect(() => {
     apiFetch("/seasons")
@@ -1108,6 +1324,8 @@ function SeasonPage() {
       .catch(e => setError(e.message))
       .finally(() => setDetailLoading(false));
   }, [selectedSid]);
+
+  useEffect(() => { setSelectedPlayer(null); }, [selectedSid]);
 
   const initials = name => name.trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const AVATAR_COLORS = [
@@ -1157,6 +1375,28 @@ function SeasonPage() {
   const currentSeason = seasons.find(s => s.is_current) || seasons[0];
   const pastSeasons = seasons.filter(s => !s.is_current && s.match_count > 0);
 
+  if (selectedPlayer) {
+    const playerStanding = detail?.standings?.find(p => p.name === selectedPlayer);
+    return (
+      <SeasonReport
+        playerName={selectedPlayer}
+        standing={playerStanding}
+        seasonMeta={{
+          season_id: detail?.season_id,
+          name: detail?.name,
+          start: detail?.start,
+          end: detail?.end,
+          is_current: detail?.is_current,
+          match_count: detail?.match_count,
+          days_remaining: detail?.days_remaining,
+        }}
+        matches={matches}
+        onBack={() => setSelectedPlayer(null)}
+        onSelectPlayer={setSelectedPlayer}
+      />
+    );
+  }
+
   return (
     <>
       <div style={S.pageHead}>Season</div>
@@ -1204,7 +1444,7 @@ function SeasonPage() {
                     const streakStr = streak > 0 ? `↑${streak}` : streak < 0 ? `↓${Math.abs(streak)}` : "–";
                     const streakColor = streak > 0 ? C.green : streak < 0 ? C.red : C.muted;
                     return (
-                      <div key={p.name} style={S.row(i === detail.standings.length - 1)}>
+                      <div key={p.name} style={{ ...S.row(i === detail.standings.length - 1), cursor: "pointer" }} onClick={() => setSelectedPlayer(p.name)}>
                         <div style={{ width: 20, textAlign: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: i === 0 ? "#BA7517" : C.muted }}>{i + 1}</div>
                         <div style={{ width: 34, height: 34, borderRadius: "50%", background: avBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: avText, flexShrink: 0 }}>
                           {initials(p.name)}
@@ -1507,7 +1747,7 @@ export default function App() {
     if (tab === "history") return <MatchHistory matches={matches} onDeleted={fetchAll} isAdmin={isAdmin} adminToken={adminToken} />;
     if (tab === "stats")   return <PlayerStats players={players} matches={matches} />;
     if (tab === "h2h")     return <HeadToHead players={players} matches={matches} />;
-    if (tab === "season")  return <SeasonPage />;
+    if (tab === "season")  return <SeasonPage matches={matches} />;
     if (tab === "edge")    return <MentalEdge players={players} matches={matches} />;
     if (tab === "rivals")  return <ChallengeMode players={players.map(p => p.name)} onLogMatch={handleLogMatch} adminToken={adminToken} />;
   };

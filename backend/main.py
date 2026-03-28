@@ -230,7 +230,7 @@ def compute_seasons(match_rows, player_names: list) -> dict:
         counts  = {n: 0 for n in player_names}
         player_stats = {
             n: {"name": n, "elo": season_start[n], "season_start_elo": season_start[n],
-                "wins": 0, "losses": 0, "matches": 0, "peak": season_start[n]}
+                "wins": 0, "losses": 0, "matches": 0, "peak": season_start[n], "low": season_start[n]}
             for n in player_names
         }
 
@@ -277,6 +277,7 @@ def compute_seasons(match_rows, player_names: list) -> dict:
                 st["matches"] += 1
                 st["elo"] = post
                 st["peak"] = max(st["peak"], post)
+                st["low"]  = min(st["low"],  post)
                 if won: st["wins"] += 1
                 else:   st["losses"] += 1
                 streak_seq[pname].append("W" if won else "L")

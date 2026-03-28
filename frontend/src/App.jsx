@@ -1096,8 +1096,14 @@ function SeasonReport({ playerName, standing, seasonMeta, matches, onBack, onSel
     )
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const { elo, wins, losses, delta, peak, low, giant_kills, streak, season_start_elo } = standing;
+  const { elo, wins, losses, delta, peak, low, giant_kills, season_start_elo } = standing;
   const played = wins + losses;
+
+  let longestWinStreak = 0, curStreak = 0;
+  for (const m of seasonMatches) {
+    if (m.winner === playerName) { curStreak++; longestWinStreak = Math.max(longestWinStreak, curStreak); }
+    else curStreak = 0;
+  }
 
   const eloHistory = [
     season_start_elo,
@@ -1217,7 +1223,7 @@ function SeasonReport({ playerName, standing, seasonMeta, matches, onBack, onSel
         <StatTile label="Win %"    val={played > 0 ? `${Math.round(wins / played * 100)}%` : "—"} />
         <StatTile label="Played"   val={played} />
         <StatTile label="G. Kills" val={giant_kills} color={giant_kills > 0 ? C.orange : C.muted} />
-        <StatTile label="Streak"   val={streak > 0 ? `+${streak}` : streak} color={streak > 0 ? C.green : streak < 0 ? C.red : C.muted} />
+        <StatTile label="Best Streak" val={longestWinStreak > 0 ? longestWinStreak : "—"} color={longestWinStreak > 0 ? C.green : C.muted} />
       </div>
 
       {opponents.length > 0 && (
@@ -1850,7 +1856,7 @@ export default function App() {
             <div style={S.sectionHead}>Playing as</div>
             {players.map(p => (
               <button key={p.name} onClick={() => { chooseIdentity(p.name); setShowSwitchSheet(false); }}
-                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", background: p.name === identity ? "rgba(136,170,255,0.08)" : C.surfaceHi, border: `1px solid ${p.name === identity ? C.accent : C.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 8, cursor: "pointer", fontFamily: FONT }}>
+                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", background: p.name === identity ? "rgba(136,170,255,0.08)" : C.surfaceHi, border: `1px solid ${p.name === identity ? C.accent : C.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 8, cursor: "pointer", fontFamily: FONT, color: C.text }}>
                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#1e3a5f", color: C.accent, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {p.name.slice(0, 2).toUpperCase()}
                 </div>
@@ -1882,7 +1888,7 @@ export default function App() {
             )}
             {!loading && players.map(p => (
               <button key={p.name} onClick={() => chooseIdentity(p.name)}
-                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", background: C.surfaceHi, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", fontFamily: FONT, textAlign: "left" }}>
+                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", background: C.surfaceHi, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 8, cursor: "pointer", fontFamily: FONT, textAlign: "left", color: C.text }}>
                 <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#1e3a5f", color: C.accent, fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   {p.name.slice(0, 2).toUpperCase()}
                 </div>

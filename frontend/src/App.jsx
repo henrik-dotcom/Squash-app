@@ -701,8 +701,91 @@ function HeadToHead({ players, matches }) {
 // ════════════════════════════════════════════════════════════════════════════════
 // MATCH HISTORY
 // ════════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════════
+// EDIT MATCH MODAL
+// ════════════════════════════════════════════════════════════════════════════════
+function EditMatchModal({ match, isOpen, onClose, onSaved, adminToken }) {
+  const [s1, setS1] = useState(String(match?.s1 || ""));
+  const [s2, setS2] = useState(String(match?.s2 || ""));
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const entered = s1 !== "" && s2 !== "";
+  const scoreOk = entered && validateScore(s1, s2);
+
+  async function submit() {
+    if (!scoreOk || saving) return;
+    setSaving(true); setError("");
+    try {
+      await apiFetch(`/matches/${match.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${adminToken}` },
+        body: JSON.stringify({ s1: parseInt(s1), s2: parseInt(s2) }),
+      });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  }
+
+  if (!isOpen || !match) return null;
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 40 }} />
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.surface, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "24px 20px 32px", zIndex: 41, fontFamily: FONT }}>
+        <div style={{ width: 40, height: 4, background: "#3A3A38", borderRadius: 2, margin: "0 auto 20px" }} />
+
+        <div style={S.sectionHead}>Edit Match Score</div>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14, color: C.text }}>
+          {match.p1} vs {match.p2}
+        </div>
+
+        <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+          <div style={{ flex: 1 }}>
+            <label style={S.label}>{match.p1}'s Score</label>
+            <input
+              type="number"
+              value={s1}
+              onChange={e => { setS1(e.target.value); setError(""); }}
+              style={S.input}
+              min="0"
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={S.label}>{match.p2}'s Score</label>
+            <input
+              type="number"
+              value={s2}
+              onChange={e => { setS2(e.target.value); setError(""); }}
+              style={S.input}
+              min="0"
+            />
+          </div>
+        </div>
+
+        {error && <div style={{ color: C.red, fontSize: 12, marginBottom: 12 }}>✗ {error}</div>}
+        {entered && !scoreOk && (
+          <div style={{ color: C.orange, fontSize: 12, marginBottom: 12 }}>⚠ Win by 2 with ≥11 pts (e.g. 11-7, 12-10)</div>
+        )}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={submit} disabled={!scoreOk || saving}
+            style={{ ...S.btn, flex: 1, opacity: (!scoreOk || saving) ? 0.5 : 1, cursor: (!scoreOk || saving) ? "default" : "pointer" }}>
+            {saving ? "…" : "Save"}
+          </button>
+          <button onClick={onClose} style={{ ...S.btnSmall, flex: 1 }}>Cancel</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function MatchHistory({ matches, onDeleted, isAdmin, adminToken }) {
   const [deleting, setDeleting] = useState(null);
+  const [editingMatch, setEditingMatch] = useState(null);
 
   async function del(id) {
     setDeleting(id);
@@ -742,19 +825,36 @@ function MatchHistory({ matches, onDeleted, isAdmin, adminToken }) {
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{m.date}</div>
                 </div>
                 {isAdmin && (
-                  <button
-                    onClick={() => del(m.id)}
-                    disabled={deleting === m.id}
-                    style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 6, color: C.muted, cursor: "pointer", fontSize: 12, padding: "5px 10px", fontFamily: FONT, flexShrink: 0, opacity: deleting === m.id ? 0.4 : 1 }}
-                  >
-                    {deleting === m.id ? "…" : "✕"}
-                  </button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={() => setEditingMatch(m)}
+                      style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 6, color: C.accent, cursor: "pointer", fontSize: 12, padding: "5px 10px", fontFamily: FONT, flexShrink: 0 }}
+                      title="Edit score"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => del(m.id)}
+                      disabled={deleting === m.id}
+                      style={{ background: "transparent", border: `1px solid ${C.borderHi}`, borderRadius: 6, color: C.muted, cursor: "pointer", fontSize: 12, padding: "5px 10px", fontFamily: FONT, flexShrink: 0, opacity: deleting === m.id ? 0.4 : 1 }}
+                    >
+                      {deleting === m.id ? "…" : "✕"}
+                    </button>
+                  </div>
                 )}
               </div>
             );
           })}
         </div>
       )}
+
+      <EditMatchModal
+        match={editingMatch}
+        isOpen={!!editingMatch}
+        onClose={() => setEditingMatch(null)}
+        onSaved={onDeleted}
+        adminToken={adminToken}
+      />
     </>
   );
 }

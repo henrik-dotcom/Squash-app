@@ -683,6 +683,44 @@ def delete_match(match_id: int, authorization: Optional[str] = Header(None)):
     return {"deleted": match_id}
 
 
+@app.patch("/api/matches/{match_id}", status_code=200)
+def edit_match(match_id: int, body: dict, authorization: Optional[str] = Header(None)):
+    require_admin(authorization)
+
+    try:
+        s1, s2 = int(body["s1"]), int(body["s2"])
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(400, "Invalid body — expected {s1: int, s2: int}")
+
+    if not validate_score(s1, s2):
+        raise HTTPException(422, "Invalid score — win by 2 with ≥11 pts (e.g. 11-7, 12-10, 15-13)")
+
+    with get_db() as db:
+        row = db.execute("SELECT id FROM match WHERE legacy_id=?", (match_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Match not found")
+        match_uuid = row["id"]
+
+        # Update set scores
+        db.execute("UPDATE match_set SET player_a_score=?, player_b_score=? WHERE match_id=?",
+                   (s1, s2, match_uuid))
+
+        # Update winner based on new scores
+        match_row = db.execute("SELECT player_a_id, player_b_id FROM match WHERE id=?", (match_uuid,)).fetchone()
+        winner_id = match_row["player_a_id"] if s1 > s2 else match_row["player_b_id"]
+        db.execute("UPDATE match SET winner_id=? WHERE id=?", (winner_id, match_uuid))
+
+        # Recompute all membership ratings
+        main_league_id = get_main_league(db)
+        match_rows = get_match_rows_new(db)
+        names      = get_player_names_new(db)
+        computed, _ = compute_state(match_rows, names)
+        if main_league_id:
+            _update_membership_stats(db, main_league_id, names, computed)
+
+    return {"ok": True}
+
+
 @app.get("/api/stats")
 def get_stats():
     with get_db() as db:

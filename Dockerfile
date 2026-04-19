@@ -3,7 +3,7 @@ FROM node:20-slim AS frontend-build
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci --prefer-offline --no-audit
-COPY frontend/ .
+COPY frontend/src frontend/index.html frontend/vite.config.js frontend/tailwind.config.js frontend/postcss.config.js ./
 RUN npm run build
 
 # Stage 2: Python backend + built frontend static files

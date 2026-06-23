@@ -222,7 +222,7 @@ def compute_seasons(match_rows, player_names: list) -> dict:
             if prev is None:
                 season_start[name] = 1000.0
             else:
-                season_start[name] = round(prev + (1200 - prev) * 0.3, 1)
+                season_start[name] = round(prev, 1)
 
         # Run ELO compute with season-start values
         # We need to seed ratings with season_start ELOs; reuse compute_state logic inline
